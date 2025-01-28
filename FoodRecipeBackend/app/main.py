@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-
+import requests
 
 # Load environment variables
 load_dotenv()
@@ -25,6 +25,7 @@ app.add_middleware(
 # Set OpenAI API key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("OpenAI API key not found. Make sure it's set in your .env file.")
 openai.api_key = OPENAI_API_KEY
@@ -33,30 +34,78 @@ openai.api_key = OPENAI_API_KEY
 class RecipePrompt(BaseModel):
     prompt: str
     
-    
+def sanitize_description(description: str) -> str:
+    # Remove common photographic terms
+    exclude_terms = ["closeup", "picture", "view", "photography"]
+    sanitized = " ".join(
+        word
+        for word in description.split()
+        if word.lower() not in exclude_terms
+    )
+    return sanitized 
     
 @app.get("/get-images/{query}")
 async def get_images(query: str):
-    """
-    Fetch multiple image URLs for the given query using the Pexels API.
-    """
     api_url = "https://api.pexels.com/v1/search"
     headers = {"Authorization": PEXELS_API_KEY}
-    params = {"query": f"{query} cooked dish", "per_page": 5}  # Fetch 5 images
+    params = {"query": f"{query}  cooked dish", "per_page": 8}
 
     try:
         response = requests.get(api_url, headers=headers, params=params)
         if response.status_code == 200:
             data = response.json()
             images = [
-                {"id": photo["id"], "url": photo["src"]["medium"], "alt": photo["alt"]}
+                {
+                    "id": photo["id"],
+                    "url": photo["src"]["medium"],
+                    "alt": query.capitalize(),  # Use the query as the description
+                }
                 for photo in data["photos"]
             ]
             return {"images": images}
-        return {"images": []}  # Return an empty array if no results
+        return {"images": []}
     except Exception as e:
         print(f"Error fetching images: {str(e)}")
         return {"images": []}
+    
+    
+    
+# Youtube Video Embeding
+
+
+
+
+@app.get("/get-videos/{query}")
+async def get_videos(query: str):
+    youtube_api_url = "https://www.googleapis.com/youtube/v3/search"
+    params = {
+        "part": "snippet",
+        "q": f"{query} recipe",  # Search term
+        "type": "video",
+        "maxResults": 3,  # Number of videos to fetch
+        "key": YOUTUBE_API_KEY,
+    }
+
+    try:
+        response = requests.get(youtube_api_url, params=params)
+        if response.status_code == 200:
+            data = response.json()
+            print("YouTube API Response:", data)  # Debug log
+            videos = [
+                {
+                    "videoId": item["id"]["videoId"],
+                    "title": item["snippet"]["title"],
+                    "thumbnail": item["snippet"]["thumbnails"]["medium"]["url"],
+                }
+                for item in data["items"]
+            ]
+            return {"videos": videos}
+        print("YouTube API Error:", response.status_code, response.text)  # Debug error
+        return {"videos": []}
+    except Exception as e:
+        print(f"Error fetching YouTube videos: {str(e)}")
+        return {"videos": []}
+
 @app.post("/generate-recipe/")
 async def generate_recipe(recipe_prompt: RecipePrompt):
     """
