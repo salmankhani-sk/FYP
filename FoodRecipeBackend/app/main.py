@@ -77,20 +77,39 @@ async def get_images(query: str):
 
 @app.get("/get-videos/{query}")
 async def get_videos(query: str):
-    youtube_api_url = "https://www.googleapis.com/youtube/v3/search"
-    params = {
-        "part": "snippet",
-        "q": f"{query} recipe",  # Search term
-        "type": "video",
-        "maxResults": 3,  # Number of videos to fetch
-        "key": YOUTUBE_API_KEY,
-    }
-
+    """
+    Fetch related YouTube videos for a given query after refining it using OpenAI API.
+    """
     try:
+        # Step 1: Use OpenAI to Generate a More Specific Search Query
+        messages = [
+            {"role": "system", "content": "You are an AI that improves search queries for finding the best cooking videos."},
+            {"role": "user", "content": f"Generate an accurate YouTube search query for cooking a {query} recipe."}
+        ]
+
+        openai_response = openai.chat.completions.create(
+            model="gpt-4",
+            messages=messages,
+            max_tokens=50,
+            temperature=0.7
+        )
+
+        refined_query = openai_response.choices[0].message.content.strip()
+        print(f"Refined Search Query: {refined_query}")  # Debugging log
+
+        # Step 2: Fetch YouTube Videos Using the Refined Query
+        youtube_api_url = "https://www.googleapis.com/youtube/v3/search"
+        params = {
+            "part": "snippet",
+            "q": refined_query,  # Using the refined query from OpenAI
+            "type": "video",
+            "maxResults": 3,  # Number of videos to fetch
+            "key": YOUTUBE_API_KEY,
+        }
+
         response = requests.get(youtube_api_url, params=params)
         if response.status_code == 200:
             data = response.json()
-            print("YouTube API Response:", data)  # Debug log
             videos = [
                 {
                     "videoId": item["id"]["videoId"],
@@ -100,8 +119,10 @@ async def get_videos(query: str):
                 for item in data["items"]
             ]
             return {"videos": videos}
+
         print("YouTube API Error:", response.status_code, response.text)  # Debug error
         return {"videos": []}
+
     except Exception as e:
         print(f"Error fetching YouTube videos: {str(e)}")
         return {"videos": []}
@@ -131,37 +152,3 @@ async def generate_recipe(recipe_prompt: RecipePrompt):
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
-# @app.get("/get-image/{recipe_name}")
-# async def get_image(recipe_name: str):
-#     api_url = f"https://api.unsplash.com/search/photos?query={recipe_name}&client_id={UNSPLASH_API_KEY}"
-#     response = requests.get(api_url)
-#     if response.status_code == 200:
-#         data = response.json()   
-#         return {"image_url": data["results"][0]["urls"]["regular"]}
-#     return {"image_url": "/images/placeholder.jpg"}
-# @app.get("/get-image/{recipe_name}")
-# async def get_image(recipe_name: str):
-#     """
-#     Fetch an image URL for the given recipe name using the Unsplash API.
-#     """
-#     api_url = f"https://api.unsplash.com/search/photos"
-#     query = f"{recipe_name} cooked"
-#     params = {
-#         "query": query,
-#         "client_id": UNSPLASH_API_KEY,
-#         "per_page": 5,  # Fetch multiple results
-#     }
-
-#     try:
-#         response = requests.get(api_url, params=params)
-#         if response.status_code == 200:
-#             data = response.json()
-#             if data["results"]:
-#                 # Randomly select an image from the results
-#                 import random
-#                 random_image = random.choice(data["results"])
-#                 return {"image_url": random_image["urls"]["regular"]}
-#         return {"image_url": "/images/placeholder.jpg"}  # Default fallback
-#     except Exception as e:
-#         print(f"Error fetching image: {str(e)}")
-#         return {"image_url": "/images/placeholder.jpg"}
