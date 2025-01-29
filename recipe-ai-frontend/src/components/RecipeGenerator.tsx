@@ -7,7 +7,8 @@ const RecipeGenerator = () => {
   const [selectedImage, setSelectedImage] = useState<{ url: string; alt: string } | null>(null); // Selected image
   const [recipe, setRecipe] = useState<string | null>(null); // Fetched recipe
   const [videos, setVideos] = useState([]); // Array of fetched videos
-  const [loading, setLoading] = useState(false); // Loading state
+  const [loading, setLoading] = useState(false); // Loading state for recipe
+  const [loadingVideos, setLoadingVideos] = useState(false); // Loading state for videos
   const [query, setQuery] = useState(""); // User's search input
 
   // Fetch images from the backend
@@ -26,6 +27,7 @@ const RecipeGenerator = () => {
   // Fetch recipe from the backend
   const fetchRecipe = async (dish: string) => {
     setLoading(true);
+    setLoadingVideos(true); // Start loading videos
     try {
       const response = await axios.post("http://127.0.0.1:8000/generate-recipe/", {
         prompt: dish,
@@ -46,6 +48,8 @@ const RecipeGenerator = () => {
       setVideos(response.data.videos); // Set the fetched videos
     } catch (error) {
       console.error("Error fetching videos:", error);
+    } finally {
+      setLoadingVideos(false); // Stop loading videos when fetching is complete
     }
   };
 
@@ -115,7 +119,7 @@ const RecipeGenerator = () => {
             />
             <p className="text-center text-lg font-medium text-gray-700 mt-4">{selectedImage.alt}</p>
 
-            {/* Loading Indicator */}
+            {/* Loading Indicator for Recipe */}
             {loading && (
               <div className="mt-6 p-4 bg-blue-100 text-blue-700 text-center rounded-lg">
                 Generating Recipe... Please wait.
@@ -130,8 +134,15 @@ const RecipeGenerator = () => {
               </div>
             )}
 
-            {/* Show related videos */}
-            {!loading && videos.length > 0 && (
+            {/* Loading Indicator for Videos */}
+            {loadingVideos && (
+              <div className="mt-6 p-4 bg-green-100 text-green-700 text-center rounded-lg">
+                Fetching Recipe Videos... Please wait.
+              </div>
+            )}
+
+            {/* Show related videos after they are fetched */}
+            {!loadingVideos && videos.length > 0 && (
               <div className="mt-6">
                 <h2 className="text-2xl font-semibold text-gray-700">Related Videos</h2>
                 <div className="grid grid-cols-1 gap-4 mt-4">
