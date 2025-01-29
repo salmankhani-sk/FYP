@@ -2,11 +2,15 @@ import openai
 import os
 import requests
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException,UploadFile, File
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-import requests
+from google.cloud import vision
+from google.oauth2 import service_account
+
+import io
+from openai import OpenAI
 
 # Load environment variables
 load_dotenv()
@@ -152,3 +156,56 @@ async def generate_recipe(recipe_prompt: RecipePrompt):
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+
+
+# Load Google Vision API Key
+GOOGLE_VISION_CREDENTIALS_PATH = os.getenv("GOOGLE_VISION_CREDENTIALS_PATH")
+if not GOOGLE_VISION_CREDENTIALS_PATH:
+    raise ValueError("Google Vision credentials path not found. Set GOOGLE_VISION_CREDENTIALS_PATH in .env.")
+
+credentials = service_account.Credentials.from_service_account_file(GOOGLE_VISION_CREDENTIALS_PATH)
+vision_client = vision.ImageAnnotatorClient(credentials=credentials)
+
+# OpenAI API Key (for text generation)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# 🔥 Endpoint to Upload Image & Generate Recipe
+@app.post("/upload-image/")
+async def upload_image(file: UploadFile = File(...)):
+    try:
+        # Read image file
+        image_bytes = await file.read()
+
+        # Convert image to Google Vision API format
+        image = vision.Image(content=image_bytes)
+        response = vision_client.label_detection(image=image)
+        labels = [label.description.lower() for label in response.label_annotations]
+
+        # Extract food-related ingredients (filter out non-food labels)
+        food_ingredients = [label for label in labels if label not in ["dish", "food", "meal", "cuisine"]]
+
+        if not food_ingredients:
+            return {"error": "No ingredients detected. Please try a different image."}
+
+        # 🔥 Generate a recipe using OpenAI GPT-3.5
+        messages = [
+            {"role": "system", "content": "You are an AI chef. Create a recipe based on given ingredients."},
+            {"role": "user", "content": f"Generate a recipe using these ingredients: {', '.join(food_ingredients)}"}
+        ]
+
+        openai_response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            max_tokens=250,
+            temperature=0.7
+        )
+
+        recipe = openai_response.choices[0].message.content.strip()
+
+        return {"ingredients": food_ingredients, "recipe": recipe}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
