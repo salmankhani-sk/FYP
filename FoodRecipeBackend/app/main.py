@@ -205,44 +205,6 @@ def get_image_embedding(image_bytes):
 
     return embedding.cpu().numpy()
 
-# @app.post("/upload-image/")
-# async def upload_image(file: UploadFile = File(...)):
-#     try:
-#         print("Reading file...")
-#         image_bytes = await file.read()
-#         print("Generating embedding...")
-#         query_embedding = get_image_embedding(image_bytes)
-
-#         print("Searching in FAISS index...")
-#         D, I = index.search(query_embedding, k=1)
-#         print(f"Best match indices: {I}, Distances: {D}")
-
-#         best_match = recipe_names[I[0][0]]
-#         print(f"Best match: {best_match}")
-
-#         # Generate recipe
-#         print("Generating recipe from OpenAI...")
-#         messages = [
-#             {"role": "system", "content": "You are an expert chef AI that generates detailed food recipes."},
-#             {"role": "user", "content": f"Generate a detailed recipe for {best_match}."}
-#         ]
-#         response = openai.chat.completions.create(
-#             model="gpt-4",
-#             messages=messages,
-#             max_tokens=150,
-#             temperature=0.7
-#         )
-#         generated_recipe = response.choices[0].message.content.strip()
-#         print(f"Generated recipe: {generated_recipe}")
-
-#         return {
-#             "dish": best_match,
-#             "recipe": generated_recipe
-#         }
-
-#     except Exception as e:
-#         print(f"Error occurred: {e}")
-#         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/upload-image/")
 async def upload_image(file: UploadFile = File(...)):
