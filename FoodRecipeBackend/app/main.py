@@ -17,11 +17,11 @@ from google.oauth2 import service_account
 from openai import OpenAI
 
 
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 # Load environment variables
 load_dotenv()
-
 # FastAPI instance
 app = FastAPI()
 
@@ -179,108 +179,6 @@ vision_client = vision.ImageAnnotatorClient(credentials=credentials)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# 🔥 Endpoint to Upload Image & Generate Recipe
-# @app.post("/upload-image/")
-# async def upload_image(file: UploadFile = File(...)):
-#     try:
-#         # Read image file
-#         image_bytes = await file.read()
-
-#         # Convert image to Google Vision API format
-#         image = vision.Image(content=image_bytes)
-#         response = vision_client.label_detection(image=image)
-#         labels = [label.description.lower() for label in response.label_annotations]
-
-#         # Extract food-related ingredients (filter out non-food labels)
-#         food_ingredients = [label for label in labels if label not in ["dish", "food", "meal", "cuisine"]]
-
-#         if not food_ingredients:
-#             return {"error": "No ingredients detected. Please try a different image."}
-
-#         # 🔥 Generate a recipe using OpenAI GPT-3.5
-#         messages = [
-#             {"role": "system", "content": "You are an AI chef. Create a recipe based on given ingredients."},
-#             {"role": "user", "content": f"Generate a recipe using these ingredients: {', '.join(food_ingredients)}"}
-#         ]
-
-#         openai_response = client.chat.completions.create(
-#             model="gpt-3.5-turbo",
-#             messages=messages,
-#             max_tokens=250,
-#             temperature=0.7
-#         )
-
-#         recipe = openai_response.choices[0].message.content.strip()
-
-#         return {"ingredients": food_ingredients, "recipe": recipe}
-
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
-    
-    
-
-# Load CLIP Model
-
-# # Load CLIP model
-# device = "cpu"  # Since your laptop does not have CUDA
-# model, preprocess = clip.load("ViT-B/32", device=device)
-
-# # Load FAISS Index with embeddings
-# d = 512  # CLIP generates 512-dimensional embeddings
-# index = faiss.IndexFlatL2(d)
-
-# try:
-#     stored_embeddings = np.load("food_embeddings.npy")
-#     index.add(stored_embeddings)
-#     with open("recipe_names.txt", "r") as f:
-#         recipe_names = f.read().splitlines()
-# except FileNotFoundError:
-#     print("No stored embeddings found, please generate them in Colab first.")
-
-# # Function to generate image embeddings
-# def get_image_embedding(image_bytes):
-#     image = Image.open(io.BytesIO(image_bytes))
-#     image = preprocess(image).unsqueeze(0).to(device)
-
-#     with torch.no_grad():
-#         embedding = model.encode_image(image)
-
-#     return embedding.cpu().numpy()
-
-# #API to upload an image and get the closest matching recipe
-
-# @app.post("/upload-image/")
-# async def upload_image(file: UploadFile = File(...)):
-#     try:
-#         image_bytes = await file.read()
-#         query_embedding = get_image_embedding(image_bytes)
-
-#         # Search for the closest match in FAISS
-#         D, I = index.search(query_embedding, k=1)
-#         best_match = recipe_names[I[0][0]]  # Best-matching dish name
-
-#         # ✅ Step 2: Generate Recipe Using OpenAI API
-#         messages = [
-#             {"role": "system", "content": "You are an expert chef AI that generates detailed food recipes."},
-#             {"role": "user", "content": f"Generate a detailed recipe for {best_match}."}
-#         ]
-
-#         response = openai.chat.completions.create(
-#             model="gpt-4",
-#             messages=messages,
-#             max_tokens=150,
-#             temperature=0.7
-#         )
-
-#         generated_recipe = response.choices[0].message.content.strip()
-
-#         return {
-#             "dish": best_match,  
-#             "recipe": generated_recipe  # ✅ Return AI-generated recipe
-#         }
-
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))
 # Load CLIP model
 device = "cpu"  # Since your laptop does not have CUDA
 model, preprocess = clip.load("ViT-B/32", device=device)
@@ -307,17 +205,58 @@ def get_image_embedding(image_bytes):
 
     return embedding.cpu().numpy()
 
+# @app.post("/upload-image/")
+# async def upload_image(file: UploadFile = File(...)):
+#     try:
+#         print("Reading file...")
+#         image_bytes = await file.read()
+#         print("Generating embedding...")
+#         query_embedding = get_image_embedding(image_bytes)
+
+#         print("Searching in FAISS index...")
+#         D, I = index.search(query_embedding, k=1)
+#         print(f"Best match indices: {I}, Distances: {D}")
+
+#         best_match = recipe_names[I[0][0]]
+#         print(f"Best match: {best_match}")
+
+#         # Generate recipe
+#         print("Generating recipe from OpenAI...")
+#         messages = [
+#             {"role": "system", "content": "You are an expert chef AI that generates detailed food recipes."},
+#             {"role": "user", "content": f"Generate a detailed recipe for {best_match}."}
+#         ]
+#         response = openai.chat.completions.create(
+#             model="gpt-4",
+#             messages=messages,
+#             max_tokens=150,
+#             temperature=0.7
+#         )
+#         generated_recipe = response.choices[0].message.content.strip()
+#         print(f"Generated recipe: {generated_recipe}")
+
+#         return {
+#             "dish": best_match,
+#             "recipe": generated_recipe
+#         }
+
+#     except Exception as e:
+#         print(f"Error occurred: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/upload-image/")
 async def upload_image(file: UploadFile = File(...)):
     try:
+        # Read and process the uploaded image
         image_bytes = await file.read()
+        print(f"Received file: {file.filename}")  # Debug log
         query_embedding = get_image_embedding(image_bytes)
 
         # Search for the closest match in FAISS
         D, I = index.search(query_embedding, k=1)
         best_match = recipe_names[I[0][0]]  # Best-matching dish name
 
-        # Generate Recipe Using OpenAI API
+        # ✅ Use OpenAI to generate a recipe
         messages = [
             {"role": "system", "content": "You are an expert chef AI that generates detailed food recipes."},
             {"role": "user", "content": f"Generate a detailed recipe for {best_match}."}
@@ -329,8 +268,8 @@ async def upload_image(file: UploadFile = File(...)):
             max_tokens=150,
             temperature=0.7
         )
-
         generated_recipe = response.choices[0].message.content.strip()
+        print(f"Generated Recipe: {generated_recipe}")  # Debug log
 
         return {
             "dish": best_match,
@@ -338,4 +277,5 @@ async def upload_image(file: UploadFile = File(...)):
         }
 
     except Exception as e:
+        print(f"Error: {e}")  # Debug log
         raise HTTPException(status_code=500, detail=str(e))
