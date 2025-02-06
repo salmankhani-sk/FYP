@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
-
+const isClient = typeof window !== "undefined";
 const RecipeGenerator = () => {
   const [images, setImages] = useState([]); // Array of fetched images
   const [selectedImage, setSelectedImage] = useState<{ url: string; alt: string } | null>(null); // Selected image
@@ -10,7 +10,11 @@ const RecipeGenerator = () => {
   const [loading, setLoading] = useState(false); // Loading state for recipe
   const [loadingVideos, setLoadingVideos] = useState(false); // Loading state for videos
   const [query, setQuery] = useState(""); // User's search input
-
+  useEffect(() => {
+    if (isClient) {
+      console.log("This runs only on the client!");
+    }
+  }, []);
   // Fetch images from the backend
   const fetchImages = async () => {
     setLoading(true);
