@@ -241,3 +241,22 @@ async def upload_image(file: UploadFile = File(...)):
     except Exception as e:
         print(f"Error: {e}")  # Debug log
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/generate-recipe-from-ingredients/")
+async def generate_recipe_from_ingredients(ingredients: RecipePrompt):
+    try:
+        messages = [
+            {"role": "system", "content": "You are an AI chef that suggests recipes based on available ingredients."},
+            {"role": "user", "content": f"Suggest a recipe using these ingredients: {ingredients.prompt}"}
+        ]
+        response = openai.chat.completions.create(
+            model="gpt-4",
+            messages=messages,
+            max_tokens=150,
+            temperature=0.7
+        )
+        recipe = response.choices[0].message.content.strip()
+        return {"recipe": recipe}
+    except openai.OpenAIError as e:
+        raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
