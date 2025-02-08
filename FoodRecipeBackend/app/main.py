@@ -1,3 +1,4 @@
+from fastapi.responses import FileResponse
 import openai
 import os
 import requests
@@ -15,7 +16,10 @@ import io
 from google.cloud import vision
 from google.oauth2 import service_account
 from openai import OpenAI
-
+from fpdf import FPDF
+from pydantic import BaseModel
+from fastapi.responses import FileResponse
+import traceback  # To log errors
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -260,3 +264,74 @@ async def generate_recipe_from_ingredients(ingredients: RecipePrompt):
         return {"recipe": recipe}
     except openai.OpenAIError as e:
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
+    
+    
+NUTRITIONIX_API_KEY = os.getenv("NUTRITIONIX_API_KEY")
+NUTRITIONIX_APP_ID = os.getenv("NUTRITIONIX_APP_ID")
+if not NUTRITIONIX_API_KEY or not NUTRITIONIX_APP_ID:
+    raise ValueError("Nutritionix API keys not found. Set them in your .env file.")
+print(NUTRITIONIX_API_KEY)
+print(NUTRITIONIX_APP_ID)
+# Model for user input
+class FoodRequest(BaseModel):
+    food_item: str
+
+# Generate Recipe and Nutrition PDFimport traceback  # Add this to log errors
+
+@app.post("/generate-food-pdf/")
+async def generate_food_pdf(food_request: FoodRequest):
+    try:
+        food_item = food_request.food_item
+        print(f"Received food item: {food_item}")  # Debug input
+
+        # Step 1: Fetch Nutrition Details Using Nutritionix API
+        headers = {
+            "x-app-id": NUTRITIONIX_APP_ID,
+            "x-app-key": NUTRITIONIX_API_KEY,
+        }
+        params = {"query": food_item}
+        nutrition_response = requests.post(
+            "https://trackapi.nutritionix.com/v2/natural/nutrients", headers=headers, json=params
+        )
+        if nutrition_response.status_code != 200:
+            print(f"Nutritionix error: {nutrition_response.text}")  # Debug nutrition API response
+            raise HTTPException(status_code=400, detail="Error fetching nutrition data.")
+        nutrition_data = nutrition_response.json()
+        print(f"Nutrition data: {nutrition_data}")  # Debug nutrition data
+
+        # Step 2: Generate a PDF with the Nutrition Data
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+
+        # Add PDF Title
+        pdf.set_font("Arial", style="B", size=16)
+        pdf.cell(200, 10, txt=f"Nutrition Details for {food_item.title()}", ln=True, align="C")
+        pdf.ln(10)
+
+        # Add Nutrition Details
+        pdf.set_font("Arial", size=12)
+        for food in nutrition_data.get("foods", []):
+            pdf.cell(200, 10, txt=f"Food: {food['food_name'].title()}", ln=True)
+            pdf.cell(200, 10, txt=f"Calories: {food.get('nf_calories', 'N/A')} kcal", ln=True)
+            pdf.cell(200, 10, txt=f"Total Fat: {food.get('nf_total_fat', 'N/A')} g", ln=True)
+            pdf.cell(200, 10, txt=f"Protein: {food.get('nf_protein', 'N/A')} g", ln=True)
+            pdf.cell(200, 10, txt=f"Carbohydrates: {food.get('nf_total_carbohydrate', 'N/A')} g", ln=True)
+            pdf.ln(5)
+
+        # Save PDF to a file
+        pdf_file_path = f"{food_item.replace(' ', '_')}_nutrition_details.pdf"
+        pdf.output(pdf_file_path)
+        print(f"PDF successfully created: {pdf_file_path}")  # Debug PDF generation
+
+        # Return the PDF as a downloadable file
+        return FileResponse(
+            pdf_file_path,
+            media_type="application/pdf",
+            filename=pdf_file_path
+        )
+
+    except Exception as e:
+        print(f"Error: {e}")  # Log the error
+        traceback.print_exc()  # Print full stack trace
+        raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
