@@ -77,7 +77,7 @@ const NutritionPage = () => {
               download={`${foodItem.replace(" ", "_")}_nutrition_details.pdf`}
               className="text-blue-600 underline"
             >
-              Download PDF
+              Download a PDF
             </a>
           </div>
         )}
