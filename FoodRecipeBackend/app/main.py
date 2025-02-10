@@ -21,7 +21,6 @@ from pydantic import BaseModel
 from fastapi.responses import FileResponse
 import traceback  # To log errors
 from typing import List
-from deep_translator import GoogleTranslator
 
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -51,13 +50,7 @@ openai.api_key = OPENAI_API_KEY
 
 
 
-@app.post("/translate-text/")
-async def translate_text(text: str, target_language: str):
-    try:
-        translated_text = GoogleTranslator(source="auto", target=target_language).translate(text)
-        return {"translated_text": translated_text}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error translating text: {str(e)}")
+
 # Pydantic model for input validation
 class RecipePrompt(BaseModel):
     prompt: str
