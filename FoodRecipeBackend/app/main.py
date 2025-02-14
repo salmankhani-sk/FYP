@@ -21,16 +21,37 @@ from pydantic import BaseModel
 from fastapi.responses import FileResponse
 import traceback  # To log errors
 from typing import List
-
+from fastapi_users import FastAPIUsers, schemas ,  BaseUserManager
+from fastapi_users.authentication import JWTAuthentication
+from fastapi_users.db import SQLAlchemyUserDatabase
+from fastapi import Depends
+from sqlalchemy import Boolean, Column , Integer , String
+from sqlalchemy.ext.asyncio import AsyncSession , create_async_engine
+from sqlalchemy.orm import sessionmaker
+from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTable, SQLAlchemyUserDatabase 
+from db import engine, Base, get_db_session
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi_users import FastAPIUsers, BaseUserManager
+from fastapi_users.authentication import JWTAuthentication
+from fastapi_users.db import SQLAlchemyUserDatabase
+from pydantic import BaseModel, EmailStr
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
+import os
+from db import engine, Base, get_db_session
+from models import User, UserRecipeHistory
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
+
 
 
 # Load environment variables
 load_dotenv()
 # FastAPI instance
 app = FastAPI()
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,10 +64,81 @@ app.add_middleware(
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("OpenAI API key not found. Make sure it's set in your .env file.")
 openai.api_key = OPENAI_API_KEY
 
+
+
+auth_backend = JWTAuthentication(secret=SECRET_KEY, lifetime_seconds=3600)
+
+
+# User Manager
+class UserManager(BaseUserManager[User, int]):
+    user_db_model = User
+
+    async def on_after_register(self, user: User, request=None):
+        print(f"User {user.email} has registered.")
+
+# User DB Adapter
+async def get_user_db():
+    async with get_db_session() as session:
+        yield SQLAlchemyUserDatabase(User, session)
+
+# Instantiate FastAPI Users
+fastapi_users = FastAPIUsers[User, int](
+    get_user_db,
+    [auth_backend],
+    UserManager,
+)
+
+# User routes
+app.include_router(
+    fastapi_users.get_auth_router(auth_backend),
+    prefix="/auth/jwt",
+    tags=["auth"],
+)
+app.include_router(
+    fastapi_users.get_register_router(),
+    prefix="/auth",
+    tags=["auth"],
+)
+app.include_router(
+    fastapi_users.get_users_router(),
+    prefix="/users",
+    tags=["users"],
+)
+
+# Models for Endpoints
+class RecipePrompt(BaseModel):
+    prompt: str
+
+# On startup: Initialize database
+@app.on_event("startup")
+async def on_startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+# Example endpoint: Save recipe search to UserRecipeHistory
+@app.post("/generate-recipe/")
+async def generate_recipe(
+    recipe_prompt: RecipePrompt,
+    db: AsyncSession = Depends(get_db_session),
+    user: User = Depends(fastapi_users.current_user),
+):
+    try:
+        # Save the user's search to the database
+        recipe_history = UserRecipeHistory(
+            user_id=user.id, recipe=recipe_prompt.prompt
+        )
+        db.add(recipe_history)
+        await db.commit()
+
+        # Dummy response (replace with actual recipe generation logic)
+        return {"recipe": f"Generated recipe for: {recipe_prompt.prompt}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
@@ -54,7 +146,9 @@ openai.api_key = OPENAI_API_KEY
 # Pydantic model for input validation
 class RecipePrompt(BaseModel):
     prompt: str
-    
+
+
+
 def sanitize_description(description: str) -> str:
     # Remove common photographic terms
     exclude_terms = ["closeup", "picture", "view", "photography"]
