@@ -42,6 +42,12 @@ from typing import List
 import os
 from db import engine, Base, get_db_session
 from models import User, UserRecipeHistory
+from fastapi_users.authentication import JWTStrategy
+from fastapi_users import FastAPIUsers, UserManager
+from fastapi_users.authentication import AuthenticationBackend, BearerTransport
+
+
+
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -72,8 +78,20 @@ openai.api_key = OPENAI_API_KEY
 
 
 auth_backend = JWTAuthentication(secret=SECRET_KEY, lifetime_seconds=3600)
+# Define the Bearer Token Transport
+bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
 
 
+
+def get_jwt_strategy() -> JWTStrategy:
+    return JWTStrategy(secret=SECRET_KEY, lifetime_seconds=3600)
+
+# Set up the Authentication Backend
+auth_backend = AuthenticationBackend(
+    name="jwt",
+    transport=bearer_transport,
+    get_strategy=get_jwt_strategy,
+)
 # User Manager
 class UserManager(BaseUserManager[User, int]):
     user_db_model = User
@@ -89,26 +107,31 @@ async def get_user_db():
 # Instantiate FastAPI Users
 fastapi_users = FastAPIUsers[User, int](
     get_user_db,
-    [auth_backend],
+    [auth_backend],  # Add all backends here
     UserManager,
 )
-
 # User routes
+# Add the authentication routes
 app.include_router(
     fastapi_users.get_auth_router(auth_backend),
     prefix="/auth/jwt",
     tags=["auth"],
 )
+# FastAPI-Users setup
+fastapi_users = FastAPIUsers[User, int](
+    get_user_db,
+    [auth_backend],  # Pass the auth backend here
+    UserManager,
+)
+
+# Add the registration route
 app.include_router(
     fastapi_users.get_register_router(),
     prefix="/auth",
     tags=["auth"],
 )
-app.include_router(
-    fastapi_users.get_users_router(),
-    prefix="/users",
-    tags=["users"],
-)
+
+# Optionally, add the reset password and verify email routes
 
 # Models for Endpoints
 class RecipePrompt(BaseModel):
