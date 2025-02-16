@@ -2,9 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+
+// Helper function to decode JWT and extract the "sub" claim (username)
+const getUsernameFromToken = (token) => {
+  try {
+    const payload = token.split(".")[1];
+    const decodedPayload = JSON.parse(atob(payload));
+    return decodedPayload.sub;
+  } catch (error) {
+    console.error("Error decoding token:", error);
+    return null;
+  }
+};
 
 const Navbar = () => {
   const pathname = usePathname();
+  const [username, setUsername] = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      const name = getUsernameFromToken(token);
+      if (name) setUsername(name);
+    }
+  }, []);
 
   return (
     <nav className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 shadow-lg">
@@ -18,60 +40,66 @@ const Navbar = () => {
         <div className="hidden md:flex space-x-6">
           <Link
             href="/"
-            className={`${
-              pathname === "/" ? "text-yellow-300" : "text-white"
-            } hover:text-yellow-300 transition`}
+            className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
           >
             Home
           </Link>
           <Link
             href="/recipe-generator"
-            className={`${
-              pathname === "/recipe-generator" ? "text-yellow-300" : "text-white"
-            } hover:text-yellow-300 transition`}
+            className={`${pathname === "/recipe-generator" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
           >
             Recipe Generator
           </Link>
           <Link
             href="/uploads"
-            className={`${
-              pathname === "/uploads" ? "text-yellow-300" : "text-white"
-            } hover:text-yellow-300 transition`}
+            className={`${pathname === "/uploads" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
           >
             Upload Images
           </Link>
           <Link
             href="/nutrition"
-            className={`${
-              pathname === "/nutrition" ? "text-yellow-300" : "text-white"
-            } hover:text-yellow-300 transition`}
+            className={`${pathname === "/nutrition" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
           >
             Nutrition Info
           </Link>
           <Link
             href="/shopping-list"
-            className={`${
-              pathname === "/shopping-list" ? "text-yellow-300" : "text-white"
-            } hover:text-yellow-300 transition`}
+            className={`${pathname === "/shopping-list" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
           >
             Shopping List
           </Link>
         </div>
 
-        {/* Right - Login and Register */}
+        {/* Right - Conditional rendering based on login status */}
         <div className="space-x-4">
-          <Link
-            href="/login"
-            className="bg-white text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition"
-          >
-            Login
-          </Link>
-          <Link
-            href="/register"
-            className="bg-yellow-400 text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition"
-          >
-            Register
-          </Link>
+          {username ? (
+            <>
+              <span className="bg-white text-gray-900 py-1 px-3 rounded transition">
+                {username}
+              </span>
+              <Link
+                href="/logout"
+                className="bg-red-400 text-white py-1 px-3 rounded hover:bg-red-500 transition"
+              >
+                Logout
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="bg-white text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition"
+              >
+                Login
+              </Link>
+              <Link
+                href="/register"
+                className="bg-yellow-400 text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition"
+              >
+                Register
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </nav>
