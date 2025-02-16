@@ -10,7 +10,7 @@ import torch
 import clip
 import faiss
 import numpy as np
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException,Depends,status
 from PIL import Image
 import io
 from google.cloud import vision
@@ -21,36 +21,20 @@ from pydantic import BaseModel
 from fastapi.responses import FileResponse
 import traceback  # To log errors
 from typing import List
-from fastapi_users import FastAPIUsers, schemas ,  BaseUserManager
-from fastapi_users.authentication import JWTAuthentication
-from fastapi_users.db import SQLAlchemyUserDatabase
-from fastapi import Depends
-from sqlalchemy import Boolean, Column , Integer , String
-from sqlalchemy.ext.asyncio import AsyncSession , create_async_engine
-from sqlalchemy.orm import sessionmaker
-from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTable, SQLAlchemyUserDatabase 
-from db import engine, Base, get_db_session
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi_users import FastAPIUsers, BaseUserManager
-from fastapi_users.authentication import JWTAuthentication
-from fastapi_users.db import SQLAlchemyUserDatabase
-from pydantic import BaseModel, EmailStr
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
-import os
-from db import engine, Base, get_db_session
-from models import User, UserRecipeHistory
-from fastapi_users.authentication import JWTStrategy
-from fastapi_users import FastAPIUsers, UserManager
-from fastapi_users.authentication import AuthenticationBackend, BearerTransport
+
+from .database import engine, Base,SessionLocal
+from .models import User, RecipeSearch, ChatLog, PDFRecord
+
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from passlib.context import CryptContext
+from datetime import timedelta
+import jwt 
 
 
-
+Base.metadata.create_all(bind=engine)
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
 
 
 
@@ -58,6 +42,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 load_dotenv()
 # FastAPI instance
 app = FastAPI()
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -77,101 +62,75 @@ openai.api_key = OPENAI_API_KEY
 
 
 
-auth_backend = JWTAuthentication(secret=SECRET_KEY, lifetime_seconds=3600)
-# Define the Bearer Token Transport
-bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
+# Password hashing configuration
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
-
-def get_jwt_strategy() -> JWTStrategy:
-    return JWTStrategy(secret=SECRET_KEY, lifetime_seconds=3600)
-
-# Set up the Authentication Backend
-auth_backend = AuthenticationBackend(
-    name="jwt",
-    transport=bearer_transport,
-    get_strategy=get_jwt_strategy,
-)
-# User Manager
-class UserManager(BaseUserManager[User, int]):
-    user_db_model = User
-
-    async def on_after_register(self, user: User, request=None):
-        print(f"User {user.email} has registered.")
-
-# User DB Adapter
-async def get_user_db():
-    async with get_db_session() as session:
-        yield SQLAlchemyUserDatabase(User, session)
-
-# Instantiate FastAPI Users
-fastapi_users = FastAPIUsers[User, int](
-    get_user_db,
-    [auth_backend],  # Add all backends here
-    UserManager,
-)
-# User routes
-# Add the authentication routes
-app.include_router(
-    fastapi_users.get_auth_router(auth_backend),
-    prefix="/auth/jwt",
-    tags=["auth"],
-)
-# FastAPI-Users setup
-fastapi_users = FastAPIUsers[User, int](
-    get_user_db,
-    [auth_backend],  # Pass the auth backend here
-    UserManager,
-)
-
-# Add the registration route
-app.include_router(
-    fastapi_users.get_register_router(),
-    prefix="/auth",
-    tags=["auth"],
-)
-
-# Optionally, add the reset password and verify email routes
-
-# Models for Endpoints
-class RecipePrompt(BaseModel):
-    prompt: str
-
-# On startup: Initialize database
-@app.on_event("startup")
-async def on_startup():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-# Example endpoint: Save recipe search to UserRecipeHistory
-@app.post("/generate-recipe/")
-async def generate_recipe(
-    recipe_prompt: RecipePrompt,
-    db: AsyncSession = Depends(get_db_session),
-    user: User = Depends(fastapi_users.current_user),
-):
+# Dependency: Get a database session
+def get_db():
+    db = SessionLocal()
     try:
-        # Save the user's search to the database
-        recipe_history = UserRecipeHistory(
-            user_id=user.id, recipe=recipe_prompt.prompt
-        )
-        db.add(recipe_history)
-        await db.commit()
+        yield db
+    finally:
+        db.close()
 
-        # Dummy response (replace with actual recipe generation logic)
-        return {"recipe": f"Generated recipe for: {recipe_prompt.prompt}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# Utility functions for password hashing
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
 
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
+# Pydantic models for request and response
+class UserCreate(BaseModel):
+    username: str
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+# Secret key and token settings (ensure to store your secret securely)
+
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = timedelta(minutes=expires_delta)
+    else:
+        expire = timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+@app.post("/register")
+def register(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == user.username).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    hashed_password = get_password_hash(user.password)
+    new_user = User(username=user.username, email=user.email, hashed_password=hashed_password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return {"message": "User registered successfully", "username": new_user.username}
+
+@app.post("/login")
+def login(user: UserLogin, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == user.username).first()
+    if not db_user or not verify_password(user.password, db_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+    # Generate a JWT token (for production, include more claims as needed)
+    access_token = create_access_token(data={"sub": db_user.username}, expires_delta=ACCESS_TOKEN_EXPIRE_MINUTES)
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 # Pydantic model for input validation
 class RecipePrompt(BaseModel):
     prompt: str
-
-
-
+    
 def sanitize_description(description: str) -> str:
     # Remove common photographic terms
     exclude_terms = ["closeup", "picture", "view", "photography"]
