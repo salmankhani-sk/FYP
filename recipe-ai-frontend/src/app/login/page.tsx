@@ -1,22 +1,24 @@
 "use client";
+
 import { useState } from "react";
 import axios from "axios";
 
 const Login = () => {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState(""); // using "username" instead of "email"
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
     try {
-      const response = await axios.post("http://localhost:8000/auth/jwt/login", {
-        username: email,
-        password: password,
+      const response = await axios.post("http://localhost:8000/login", {
+        username, // pass the username
+        password,
       });
       const token = response.data.access_token;
       localStorage.setItem("token", token);
       alert("Login successful!");
     } catch (error) {
       console.error("Login failed:", error);
+      alert("Login failed! Please check your credentials.");
     }
   };
 
@@ -25,10 +27,10 @@ const Login = () => {
       <div className="bg-white shadow-lg rounded-lg p-8 w-96">
         <h1 className="text-2xl font-bold text-center mb-6">Login</h1>
         <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          type="text"
+          placeholder="Username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
           className="w-full px-4 py-2 mb-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
         <input
