@@ -3,10 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-
-interface DecodedToken {
-  sub?: string; // our token payload uses "sub" to store the username
-}
+import { jwtDecode } from "jwt-decode"; // Ensure you have this library installed
 
 const Navbar = () => {
   const pathname = usePathname();
@@ -14,41 +11,23 @@ const Navbar = () => {
   const [username, setUsername] = useState("");
 
   useEffect(() => {
-    async function decodeToken() {
-      const token = localStorage.getItem("token");
-      if (token) {
-        try {
-          // Dynamically import jwt-decode
-          const jwtModule = await import("jwt-decode");
-          // Determine a callable decode function from the imported module.
-          let decodeFn: (token: string) => any;
-          if (typeof jwtModule === "function") {
-            decodeFn = jwtModule;
-          } else if (typeof jwtModule.default === "function") {
-            decodeFn = jwtModule.default;
-          } else if (typeof jwtModule.decode === "function") {
-            decodeFn = jwtModule.decode;
-          } else {
-            // Fallback: assume the module itself is callable.
-            decodeFn = jwtModule as unknown as (token: string) => any;
-          }
-          const decodedToken: DecodedToken = decodeFn(token);
-          setUsername(decodedToken.sub || "");
-        } catch (error) {
-          console.error("Invalid token:", error);
-          setUsername("");
+    const token = localStorage.getItem("token");
+    if (token) {
+      try {
+        const decodedToken = jwtDecode<{ username?: string }>(token); // Ensure correct type
+        if (decodedToken.username) {
+          setUsername(decodedToken.username); // Extract username instead of sub
         }
-      } else {
-        setUsername("");
+      } catch (error) {
+        console.error("Invalid token:", error);
       }
     }
-    decodeToken();
-  }, [pathname]); // re-run effect when the URL changes
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     setUsername("");
-    router.push("/");
+    router.push("/"); // Redirect to homepage
   };
 
   return (
