@@ -1,24 +1,35 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation"; // Import useRouter for redirection
 import axios from "axios";
 
 const Login = () => {
-  const [username, setUsername] = useState(""); // using "username" instead of "email"
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const router = useRouter(); // Initialize router
 
   const handleLogin = async () => {
+    setError(""); // Clear any previous errors
+
     try {
       const response = await axios.post("http://localhost:8000/login", {
-        username, // pass the username
+        username,
         password,
       });
       const token = response.data.access_token;
+
       localStorage.setItem("token", token);
+
       alert("Login successful!");
+
+      // Redirect to the Recipe Generator page
+      router.push("/generate-recipe");
+
     } catch (error) {
       console.error("Login failed:", error);
-      alert("Login failed! Please check your credentials.");
+      setError("Login failed! Please check your credentials.");
     }
   };
 
@@ -26,6 +37,9 @@ const Login = () => {
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white shadow-lg rounded-lg p-8 w-96">
         <h1 className="text-2xl font-bold text-center mb-6">Login</h1>
+
+        {error && <p className="text-red-500 mb-4">{error}</p>}
+
         <input
           type="text"
           placeholder="Username"

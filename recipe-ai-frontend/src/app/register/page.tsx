@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import axios from "axios";
 
 const RegisterPage = () => {
@@ -10,10 +11,16 @@ const RegisterPage = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const router = useRouter();
 
-  const handleRegister = async () => {
+  const handleRegister = useCallback(async () => {
     setError("");
     setSuccess("");
+
+    if (!username || !email || !password) {
+      setError("All fields are required!");
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match!");
@@ -21,32 +28,41 @@ const RegisterPage = () => {
     }
 
     try {
-      // Make sure the URL matches your backend route
       const response = await axios.post("http://localhost:8000/register", {
-        username, // include username field
+        username,
         email,
         password,
       });
 
-      setSuccess("Registration successful! You can now log in.");
+      // Save the token from registration for auto-login
+      localStorage.setItem("token", response.data.access_token);
+
+      setSuccess("Registration successful! Redirecting...");
       setUsername("");
       setEmail("");
       setPassword("");
       setConfirmPassword("");
+
+      setTimeout(() => {
+        router.push("/recipe-generator");
+      }, 1500);
     } catch (err) {
-      setError("Registration failed! Please try again.");
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.detail || "Registration failed! Please try again.");
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
     }
-  };
+  }, [username, email, password, confirmPassword, router]);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <div className="w-full max-w-md bg-white p-6 rounded shadow-lg">
-        <h2 className="text-2xl font-bold mb-4">Register</h2>
+        <h2 className="text-2xl text-blue-600 font-bold mb-4">Register</h2>
 
-        {error && <p className="text-red-500">{error}</p>}
-        {success && <p className="text-green-500">{success}</p>}
+        {error && <p className="text-red-500 mb-4">{error}</p>}
+        {success && <p className="text-green-500 mb-4">{success}</p>}
 
-        {/* Username Field */}
         <div className="mb-4">
           <label className="block text-gray-700">Username</label>
           <input
@@ -58,7 +74,6 @@ const RegisterPage = () => {
           />
         </div>
 
-        {/* Email Field */}
         <div className="mb-4">
           <label className="block text-gray-700">Email</label>
           <input
@@ -70,7 +85,6 @@ const RegisterPage = () => {
           />
         </div>
 
-        {/* Password Field */}
         <div className="mb-4">
           <label className="block text-gray-900">Password</label>
           <input
@@ -82,7 +96,6 @@ const RegisterPage = () => {
           />
         </div>
 
-        {/* Confirm Password Field */}
         <div className="mb-4">
           <label className="block text-gray-900">Confirm Password</label>
           <input
@@ -94,7 +107,6 @@ const RegisterPage = () => {
           />
         </div>
 
-        {/* Submit Button */}
         <button
           onClick={handleRegister}
           className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition"

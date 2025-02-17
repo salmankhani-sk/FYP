@@ -26,11 +26,12 @@ from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
 
-# -----------------------------
-# PATCH: Ensure bcrypt has __about__ attribute for Passlib
 import bcrypt
-if not hasattr(bcrypt, "__about__"):
-    bcrypt.__about__ = {"__version__": bcrypt.__version__}
+import types
+
+# Patch bcrypt: Ensure bcrypt.__about__ is an object with a __version__ attribute
+if not hasattr(bcrypt, "__about__") or not hasattr(bcrypt.__about__, "__version__"):
+    bcrypt.__about__ = types.SimpleNamespace(__version__=bcrypt.__version__)
 # -----------------------------
 
 # Import async database components and ORM models
@@ -98,6 +99,18 @@ def create_access_token(data: dict, expires_delta: int = None):
     return encoded_jwt
 
 # Registration endpoint (async)
+# @app.post("/register")
+# async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
+#     result = await db.execute(select(User).filter(User.username == user.username))
+#     db_user = result.scalars().first()
+#     if db_user:
+#         raise HTTPException(status_code=400, detail="Username already registered")
+#     hashed_password = get_password_hash(user.password)
+#     new_user = User(username=user.username, email=user.email, hashed_password=hashed_password)
+#     db.add(new_user)
+#     await db.commit()
+#     await db.refresh(new_user)
+#     return {"message": "User registered successfully", "username": new_user.username}
 @app.post("/register")
 async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).filter(User.username == user.username))
@@ -109,8 +122,16 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
-    return {"message": "User registered successfully", "username": new_user.username}
-
+    # Create access token immediately after registration
+    access_token = create_access_token(
+        data={"sub": new_user.username}, expires_delta=ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "username": new_user.username,
+        "message": "User registered successfully"
+    }
 # Updated Login endpoint (async)
 @app.post("/login")
 async def login(user: UserLogin, db: AsyncSession = Depends(get_db)):
