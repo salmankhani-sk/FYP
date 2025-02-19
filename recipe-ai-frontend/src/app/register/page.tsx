@@ -21,7 +21,6 @@ const RegisterPage = () => {
       setError("All fields are required!");
       return;
     }
-
     if (password !== confirmPassword) {
       setError("Passwords do not match!");
       return;
@@ -34,7 +33,7 @@ const RegisterPage = () => {
         password,
       });
 
-      // Save the token from registration for auto-login
+      // Save the token to localStorage to auto-login the user
       localStorage.setItem("token", response.data.access_token);
 
       setSuccess("Registration successful! Redirecting...");
@@ -46,7 +45,8 @@ const RegisterPage = () => {
       setTimeout(() => {
         router.push("/recipe-generator");
       }, 1500);
-    } catch (err) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
       if (axios.isAxiosError(err)) {
         setError(err.response?.data?.detail || "Registration failed! Please try again.");
       } else {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { jwtDecode } from "jwt-decode"; // Ensure you have this library installed
+import { jwtDecode } from "jwt-decode"; // Make sure you have installed jwt-decode
 
 const Navbar = () => {
   const pathname = usePathname();
@@ -14,15 +14,18 @@ const Navbar = () => {
     const token = localStorage.getItem("token");
     if (token) {
       try {
-        const decodedToken = jwtDecode<{ username?: string }>(token); // Ensure correct type
-        if (decodedToken.username) {
-          setUsername(decodedToken.username); // Extract username instead of sub
+        // Decode the token; FastAPI stores the username in "sub"
+        const decodedToken = jwtDecode<{ sub?: string }>(token);
+        if (decodedToken.sub) {
+          setUsername(decodedToken.sub);
         }
       } catch (error) {
         console.error("Invalid token:", error);
       }
+    } else {
+      setUsername("");
     }
-  }, []);
+  }, [pathname]); // Re-run on route change so that Navbar updates if token changes
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -33,41 +36,55 @@ const Navbar = () => {
   return (
     <nav className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 shadow-lg">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
+        {/* Left - Project Name */}
         <div className="text-white font-bold text-xl">
           <Link href="/">Food Recipe AI</Link>
         </div>
-        <div className="hidden md:flex space-x-6">
-          <Link
-            href="/"
-            className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-          >
-            Home
-          </Link>
-          <Link
-            href="/recipe-generator"
-            className={`${pathname === "/recipe-generator" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-          >
-            Recipe Generator
-          </Link>
-          <Link
-            href="/uploads"
-            className={`${pathname === "/uploads" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-          >
-            Upload Images
-          </Link>
-          <Link
-            href="/nutrition"
-            className={`${pathname === "/nutrition" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-          >
-            Nutrition Info
-          </Link>
-          <Link
-            href="/shopping-list"
-            className={`${pathname === "/shopping-list" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-          >
-            Shopping List
-          </Link>
-        </div>
+        {/* Center - Routes */}
+        {username ? (
+          <div className="hidden md:flex space-x-6">
+            <Link
+              href="/"
+              className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
+            >
+              Home
+            </Link>
+            <Link
+              href="/recipe-generator"
+              className={`${pathname === "/recipe-generator" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
+            >
+              Recipe Generator
+            </Link>
+            <Link
+              href="/uploads"
+              className={`${pathname === "/uploads" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
+            >
+              Upload Images
+            </Link>
+            <Link
+              href="/nutrition"
+              className={`${pathname === "/nutrition" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
+            >
+              Nutrition Info
+            </Link>
+            <Link
+              href="/shopping-list"
+              className={`${pathname === "/shopping-list" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
+            >
+              Shopping List
+            </Link>
+          </div>
+        ) : (
+          <div className="hidden md:flex space-x-6">
+            <Link
+              href="/"
+              className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
+            >
+              Home
+            </Link>
+          </div>
+        )}
+        {/* Right - Authentication Buttons */}
         <div className="space-x-4">
           {username ? (
             <>
