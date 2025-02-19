@@ -1,31 +1,34 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import axios from "axios";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import axios from 'axios';
 
 const Login = () => {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const router = useRouter();
 
   const handleLogin = async () => {
-    setError("");
+    setError('');
     try {
-      const response = await axios.post("http://localhost:8000/login", {
+      const response = await axios.post('http://localhost:8000/login', {
         username,
         password,
       });
       const token = response.data.access_token;
-      localStorage.setItem("token", token);
-      alert("Login successful!");
-      router.push("/recipe-generator");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-      console.error("Login failed:", error);
-      setError("Login failed! Please check your credentials.");
+      localStorage.setItem('token', token);
+      alert('Login successful!');
+      router.push('/recipe-generator');
+    } catch (error) {
+      console.error('Login failed:', error);
+      setError('Login failed! Please check your credentials.');
     }
+  };
+
+  const handleSignUp = () => {
+    router.push('/register');
   };
 
   return (
@@ -53,6 +56,16 @@ const Login = () => {
         >
           Login
         </button>
+        <div onClick={handleSignUp}>
+        <p className="text-center text-blue-500 underline cursor-pointer mt-4">
+          Don&apos;t have an account?{' '}
+          <span
+            className="text-blue-500 hover:underline cursor-pointer"
+            
+          >
+            Sign up
+          </span>
+        </p></div>
       </div>
     </div>
   );

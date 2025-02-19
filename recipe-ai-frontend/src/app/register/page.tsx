@@ -45,8 +45,7 @@ const RegisterPage = () => {
       setTimeout(() => {
         router.push("/recipe-generator");
       }, 1500);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
+    } catch (err) {
       if (axios.isAxiosError(err)) {
         setError(err.response?.data?.detail || "Registration failed! Please try again.");
       } else {
@@ -113,6 +112,16 @@ const RegisterPage = () => {
         >
           Register
         </button>
+
+        <p className="text-center text-gray-700 mt-4">
+          Already have an account?{" "}
+          <span
+            className="text-blue-500 hover:underline cursor-pointer"
+            onClick={() => router.push("/login")}
+          >
+            Login
+          </span>
+        </p>
       </div>
     </div>
   );

@@ -1,14 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState,useEffect } from "react";
 import axios from "axios";
+import { useRouter } from "next/router";
 
 const RecipeFromIngredients = () => {
   const [ingredients, setIngredients] = useState<string>(""); // Input for ingredients
   const [recipe, setRecipe] = useState<string | null>(null); // Fetched recipe
   const [loading, setLoading] = useState(false); // Loading state
   const [error, setError] = useState<string | null>(null); // Error message
-
+  const router = useRouter();
+  
+    useEffect(() => {
+      if (status === "unauthenticated") {
+        router.push("/login");
+      }
+    }, [status, router]);
+  
+    if (status === "loading") {
+      return <p>Loading...</p>;
+    }
   // Function to fetch recipe based on ingredients
   const fetchRecipe = async () => {
     if (!ingredients.trim()) {
@@ -32,7 +43,9 @@ const RecipeFromIngredients = () => {
       setLoading(false);
     }
   };
+  if (status === "authenticated"){
 
+  
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-xl bg-white p-8 rounded-lg shadow-lg">
@@ -74,7 +87,7 @@ const RecipeFromIngredients = () => {
         )}
       </div>
     </div>
-  );
+  );}
 };
 
 export default RecipeFromIngredients;

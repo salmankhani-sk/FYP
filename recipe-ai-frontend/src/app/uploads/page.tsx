@@ -1,16 +1,29 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState } from "react";
 import axios from "axios";
-
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 const RecipeGenerator = () => {
+  
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Selected file
   const [recipe, setRecipe] = useState<string | null>(null); // Fetched recipe
   const [videos, setVideos] = useState([]); // Related YouTube videos
   const [loading, setLoading] = useState(false); // Loading state for recipe
   const [loadingVideos, setLoadingVideos] = useState(false); // Loading state for videos
   const [error, setError] = useState<string | null>(null); // Error message
+  const router = useRouter();
 
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    }
+  }, [status, router]);
+
+  if (status === "loading") {
+    return <p>Loading...</p>;
+  }
   // Handle File Selection
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
@@ -64,7 +77,7 @@ const RecipeGenerator = () => {
       setLoadingVideos(false); // Stop loading videos
     }
   };
-
+  if (status === "authenticated") {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
       <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full">
@@ -150,7 +163,7 @@ const RecipeGenerator = () => {
         )}
       </div>
     </div>
-  );
+  );}
 };
 
 export default RecipeGenerator;
