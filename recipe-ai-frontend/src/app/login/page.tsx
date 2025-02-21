@@ -3,6 +3,26 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
+// Import the js-cookie library
+import Cookies from 'js-cookie';
+
+const handleLogin = async () => {
+  setError("");
+  try {
+    const response = await axios.post("http://localhost:8000/login", {
+      username,
+      password,
+    });
+    const token = response.data.access_token;
+    // Set the token as a cookie
+    Cookies.set("token", token, { expires: 7 }); // Expires in 7 days
+    alert("Login successful!");
+    router.push("/recipe-generator");
+  } catch (error) {
+    console.error("Login failed:", error);
+    setError("Login failed! Please check your credentials.");
+  }
+};
 
 const Login = () => {
   const [username, setUsername] = useState('');
