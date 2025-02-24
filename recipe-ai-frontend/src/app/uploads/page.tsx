@@ -5,8 +5,8 @@ import { useState } from "react";
 import axios from "axios";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 const RecipeGenerator = () => {
-  
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Selected file
   const [recipe, setRecipe] = useState<string | null>(null); // Fetched recipe
   const [videos, setVideos] = useState([]); // Related YouTube videos
@@ -14,6 +14,7 @@ const RecipeGenerator = () => {
   const [loadingVideos, setLoadingVideos] = useState(false); // Loading state for videos
   const [error, setError] = useState<string | null>(null); // Error message
   const router = useRouter();
+  const { data: session, status } = useSession();
 
   useEffect(() => {
     if (status === "unauthenticated") {

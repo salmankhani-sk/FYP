@@ -3,26 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-// Import the js-cookie library
-import Cookies from 'js-cookie';
-
-const handleLogin = async () => {
-  setError("");
-  try {
-    const response = await axios.post("http://localhost:8000/login", {
-      username,
-      password,
-    });
-    const token = response.data.access_token;
-    // Set the token as a cookie
-    Cookies.set("token", token, { expires: 7 }); // Expires in 7 days
-    alert("Login successful!");
-    router.push("/recipe-generator");
-  } catch (error) {
-    console.error("Login failed:", error);
-    setError("Login failed! Please check your credentials.");
-  }
-};
+import Cookies from 'js-cookie'; // Import js-cookie
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -38,7 +19,8 @@ const Login = () => {
         password,
       });
       const token = response.data.access_token;
-      localStorage.setItem('token', token);
+      // Set the token as a cookie
+      Cookies.set('token', token, { expires: 7 }); // Expires in 7 days
       alert('Login successful!');
       router.push('/recipe-generator');
     } catch (error) {
@@ -76,16 +58,9 @@ const Login = () => {
         >
           Login
         </button>
-        <div onClick={handleSignUp}>
-        <p className="text-center text-blue-500 underline cursor-pointer mt-4">
-          Don&apos;t have an account?{' '}
-          <span
-            className="text-blue-500 hover:underline cursor-pointer"
-            
-          >
-            Sign up
-          </span>
-        </p></div>
+        <p className="text-center text-blue-500 underline cursor-pointer mt-4" onClick={handleSignUp}>
+          Don&apos;t have an account? Sign up
+        </p>
       </div>
     </div>
   );
