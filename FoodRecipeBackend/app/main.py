@@ -28,7 +28,8 @@ from passlib.context import CryptContext
 
 import bcrypt
 import types
-
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import jwt, JWTError
 # Patch bcrypt: Ensure bcrypt.__about__ is an object with a __version__ attribute
 if not hasattr(bcrypt, "__about__") or not hasattr(bcrypt.__about__, "__version__"):
     bcrypt.__about__ = types.SimpleNamespace(__version__=bcrypt.__version__)
@@ -44,7 +45,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 load_dotenv()
 
 app = FastAPI()
-
+oauth2_scheme = HTTPBearer()
 # Startup event: create tables asynchronously
 @app.on_event("startup")
 async def on_startup():
@@ -90,6 +91,20 @@ class UserLogin(BaseModel):
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)):
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return username
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
 
 def create_access_token(data: dict, expires_delta: int = None):
     to_encode = data.copy()
@@ -193,7 +208,7 @@ async def get_videos(query: str):
         return {"videos": []}
 
 @app.post("/generate-recipe/")
-async def generate_recipe(recipe_prompt: RecipePrompt):
+async def generate_recipe(recipe_prompt: RecipePrompt, user: str = Depends(get_current_user)):
     try:
         messages = [
             {"role": "system", "content": "You are an AI that generates detailed recipes with ingredients, preparation steps, and cook times"},
@@ -242,7 +257,7 @@ def get_image_embedding(image_bytes):
     return embedding.cpu().numpy()
 
 @app.post("/upload-image/")
-async def upload_image(file: UploadFile = File(...)):
+async def upload_image(file: UploadFile = File(...),user: str = Depends(get_current_user)):
     try:
         image_bytes = await file.read()
         print(f"Received file: {file.filename}")
@@ -289,7 +304,7 @@ class FoodRequest(BaseModel):
     food_item: str
 
 @app.post("/generate-food-pdf/")
-async def generate_food_pdf(food_request: FoodRequest):
+async def generate_food_pdf(food_request: FoodRequest,user: str = Depends(get_current_user)):
     try:
         food_item = food_request.food_item
         print(f"Received food item: {food_item}")
@@ -331,7 +346,7 @@ class ShoppingListRequest(BaseModel):
     recipes: List[str]
 
 @app.post("/generate-shopping-list/")
-async def generate_shopping_list(request: ShoppingListRequest):
+async def generate_shopping_list(request: ShoppingListRequest,user: str = Depends(get_current_user)):
     try:
         selected_recipes = request.recipes
         shopping_list = {}
