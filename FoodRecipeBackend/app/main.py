@@ -60,7 +60,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+def get_image_path(filename):
+    base_dir = os.path.abspath(os.path.join(__file__, ".."))
+    image_dir = os.path.join(base_dir, "static", "images")
+    return os.path.join(image_dir, filename)
+category_images = {
+    "Calories": get_image_path("running_person.png"),
+    "Total Fat": get_image_path("bacon.png"),
+    "Protein": get_image_path("chicken_leg.png"),
+    "Carbohydrates": get_image_path("bread.png"),
+}
+categories = [
+    ("Calories", "nf_calories", "kcal"),
+    ("Total Fat", "nf_total_fat", "g"),
+    ("Protein", "nf_protein", "g"),
+    ("Carbohydrates", "nf_total_carbohydrate", "g"),
+]
+image_width = 10
+image_height = 10
 # Set API keys and secret
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
@@ -255,28 +272,62 @@ def get_image_embedding(image_bytes):
     with torch.no_grad():
         embedding = model.encode_image(image)
     return embedding.cpu().numpy()
-
 @app.post("/upload-image/")
-async def upload_image(file: UploadFile = File(...),user: str = Depends(get_current_user)):
+async def upload_image(file: UploadFile = File(...), user: str = Depends(get_current_user)):
+    import time
+    from openai import AsyncOpenAI
+    import aiohttp
+
+    client = AsyncOpenAI(api_key=OPENAI_API_KEY)  # Async client
     try:
-        image_bytes = await file.read()
         print(f"Received file: {file.filename}")
+        start_time = time.time()
+
+        # Step 1: Read image bytes
+        image_bytes = await file.read()
+        print(f"Time to read file: {time.time() - start_time:.2f} seconds")
+        step_time = time.time()
+
+        # Step 2: Generate embedding with CLIP
         query_embedding = get_image_embedding(image_bytes)
+        print(f"Time for CLIP embedding: {time.time() - step_time:.2f} seconds")
+        step_time = time.time()
+
+        # Step 3: FAISS search
         D, I = index.search(query_embedding, k=1)
         best_match = recipe_names[I[0][0]]
+        print(f"Time for FAISS search: {time.time() - step_time:.2f} seconds")
+        step_time = time.time()
+
+        # Step 4: Generate recipe with OpenAI (async with timeout)
         messages = [
             {"role": "system", "content": "You are an expert chef AI that generates detailed food recipes."},
             {"role": "user", "content": f"Generate a detailed recipe for {best_match}."}
         ]
-        response = openai.chat.completions.create(
-            model="gpt-4", messages=messages, max_tokens=150, temperature=0.7
-        )
-        generated_recipe = response.choices[0].message.content.strip()
-        print(f"Generated Recipe: {generated_recipe}")
+        async with aiohttp.ClientSession() as session:
+            try:
+                response = await asyncio.wait_for(
+                    client.chat.completions.create(
+                        model="gpt-4", messages=messages, max_tokens=150, temperature=0.7
+                    ),
+                    timeout=30.0  # 30-second timeout
+                )
+                generated_recipe = response.choices[0].message.content.strip()
+                print(f"Time for OpenAI recipe generation: {time.time() - step_time:.2f} seconds")
+                print(f"Generated Recipe: {generated_recipe}")
+            except asyncio.TimeoutError:
+                print("OpenAI request timed out after 30 seconds")
+                raise HTTPException(status_code=504, detail="Recipe generation timed out. Please try again.")
+            except Exception as api_error:
+                print(f"OpenAI API error: {str(api_error)}")
+                raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(api_error)}")
+
         return {"dish": best_match, "recipe": generated_recipe}
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await client.close()  # Ensure async client is closed
 
 @app.post("/generate-recipe-from-ingredients/")
 async def generate_recipe_from_ingredients(ingredients: RecipePrompt):
@@ -304,7 +355,7 @@ class FoodRequest(BaseModel):
     food_item: str
 
 @app.post("/generate-food-pdf/")
-async def generate_food_pdf(food_request: FoodRequest,user: str = Depends(get_current_user)):
+async def generate_food_pdf(food_request: FoodRequest, user: str = Depends(get_current_user)):
     try:
         food_item = food_request.food_item
         print(f"Received food item: {food_item}")
@@ -318,21 +369,49 @@ async def generate_food_pdf(food_request: FoodRequest,user: str = Depends(get_cu
             print(f"Nutritionix error: {nutrition_response.text}")
             raise HTTPException(status_code=400, detail="Error fetching nutrition data.")
         nutrition_data = nutrition_response.json()
-        print(f"Nutrition data: {nutrition_data}")
+        foods = nutrition_data.get("foods", [])
+        if not foods:
+            raise HTTPException(status_code=400, detail="No food item found.")
+        food = foods[0]  # Take the first food item
+
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=12)
-        pdf.set_font("Arial", style="B", size=16)
-        pdf.cell(200, 10, txt=f"Nutrition Details for {food_item.title()}", ln=True, align="C")
+
+        # Title
+        pdf.set_font("Arial", size=16, style="B")
+        pdf.cell(0, 10, f"Nutrition Details for {food_item.title()}", ln=True, align="C")
         pdf.ln(10)
+
+        # Food name
+        pdf.set_font("Arial", size=12, style="B")
+        pdf.cell(0, 10, f"Food: {food['food_name'].title()}", ln=True)
         pdf.set_font("Arial", size=12)
-        for food in nutrition_data.get("foods", []):
-            pdf.cell(200, 10, txt=f"Food: {food['food_name'].title()}", ln=True)
-            pdf.cell(200, 10, txt=f"Calories: {food.get('nf_calories', 'N/A')} kcal", ln=True)
-            pdf.cell(200, 10, txt=f"Total Fat: {food.get('nf_total_fat', 'N/A')} g", ln=True)
-            pdf.cell(200, 10, txt=f"Protein: {food.get('nf_protein', 'N/A')} g", ln=True)
-            pdf.cell(200, 10, txt=f"Carbohydrates: {food.get('nf_total_carbohydrate', 'N/A')} g", ln=True)
-            pdf.ln(5)
+        pdf.ln(5)
+
+        # Nutritional values table
+        for category, key, unit in categories:
+            value = food.get(key, "N/A")
+            image_path = category_images.get(category, "")
+
+            x = pdf.get_x()
+            y = pdf.get_y()
+
+            # Image cell with border
+            pdf.cell(image_width, 10, '', border=1)
+            if image_path and os.path.exists(image_path):
+                pdf.image(image_path, x, y, image_width, image_height)
+            pdf.set_x(x + image_width)  # Move back to start of row for next cells
+
+            # Category name cell
+            pdf.cell(80, 10, category, border=1)
+
+            # Value cell, right-aligned
+            pdf.cell(50, 10, f"{value} {unit}", border=1, align="R")
+
+            # Move to next line
+            pdf.ln(10)
+
         pdf_file_path = f"{food_item.replace(' ', '_')}_nutrition_details.pdf"
         pdf.output(pdf_file_path)
         print(f"PDF successfully created: {pdf_file_path}")
@@ -341,7 +420,6 @@ async def generate_food_pdf(food_request: FoodRequest,user: str = Depends(get_cu
         print(f"Error: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
-
 class ShoppingListRequest(BaseModel):
     recipes: List[str]
 
