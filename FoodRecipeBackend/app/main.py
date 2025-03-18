@@ -423,11 +423,22 @@ async def generate_food_pdf(food_request: FoodRequest, user: str = Depends(get_c
 class ShoppingListRequest(BaseModel):
     recipes: List[str]
 
+# Helper function to get image path
+def get_image_path(filename):
+    base_dir = os.path.abspath(os.path.join(__file__, ".."))
+    image_dir = os.path.join(base_dir, "static", "images")
+    return os.path.join(image_dir, filename)
+
+# Shopping cart image path
+shopping_cart_image = get_image_path("shopping_cart.png")
+
 @app.post("/generate-shopping-list/")
-async def generate_shopping_list(request: ShoppingListRequest,user: str = Depends(get_current_user)):
+async def generate_shopping_list(request: ShoppingListRequest, user: str = Depends(get_current_user)):
     try:
         selected_recipes = request.recipes
-        shopping_list = {}
+        recipe_ingredients = {}  # Dictionary to store ingredients by recipe
+
+        # Fetch ingredients for each recipe
         for recipe in selected_recipes:
             messages = [
                 {"role": "system", "content": "You are an AI chef that provides ingredients lists for recipes."},
@@ -437,21 +448,51 @@ async def generate_shopping_list(request: ShoppingListRequest,user: str = Depend
                 model="gpt-4", messages=messages, max_tokens=200, temperature=0.7
             )
             ingredients = response.choices[0].message.content.strip().split("\n")
-            for ingredient in ingredients:
-                item = ingredient.strip()
-                if item:
-                    shopping_list[item] = shopping_list.get(item, 0) + 1
+            # Store ingredients for this recipe, removing empty or malformed lines
+            recipe_ingredients[recipe] = [item.strip() for item in ingredients if item.strip()]
+
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=12)
+
+        # Title
         pdf.set_font("Arial", style="B", size=16)
-        pdf.cell(200, 10, txt="Grocery Shopping List", ln=True, align="C")
-        pdf.ln(10)
+        pdf.cell(0, 10, txt="Grocery Shopping List", ln=True, align="C")
+        pdf.ln(5)
+
+        # Add shopping cart image below title
+        if os.path.exists(shopping_cart_image):
+            pdf.image(shopping_cart_image, x=95, y=20, w=10, h=10)  # Centered below title
+        pdf.ln(15)  # Space after image
+
         pdf.set_font("Arial", size=12)
-        for item, quantity in shopping_list.items():
-            pdf.cell(200, 10, txt=f"- {item} (x{quantity})", ln=True)
+
+        # Generate sections for each recipe
+        for recipe, ingredients in recipe_ingredients.items():
+            # Recipe heading with border
+            pdf.set_font("Arial", style="B", size=14)
+            pdf.cell(0, 10, txt=f"{recipe.title()}", ln=True, border=1)
+            pdf.set_font("Arial", size=12)
+            pdf.ln(2)
+
+            # Ingredients list for this recipe
+            for ingredient in ingredients:
+                # Handle quantity if present (e.g., "2 potatoes" or "- 2 potatoes")
+                if ingredient.startswith("- "):
+                    ingredient = ingredient[2:].strip()  # Remove "- " prefix if present
+                parts = ingredient.split(" ", 1)  # Split on first space
+                if len(parts) > 1 and parts[0].isdigit():
+                    quantity = parts[0]
+                    item = parts[1]
+                    pdf.cell(0, 8, txt=f"- {item} (x{quantity})", ln=True)
+                else:
+                    pdf.cell(0, 8, txt=f"- {ingredient}", ln=True)
+            pdf.ln(5)  # Space between recipe sections
+
         pdf_path = "shopping_list.pdf"
         pdf.output(pdf_path)
+        print(f"PDF successfully created: {pdf_path}")
         return FileResponse(pdf_path, media_type="application/pdf", filename="shopping_list.pdf")
     except Exception as e:
+        print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating shopping list: {str(e)}")
