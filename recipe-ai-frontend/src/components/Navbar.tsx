@@ -5,12 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { jwtDecode } from "jwt-decode";
 import Cookies from "js-cookie";
+import { FaHome, FaUtensils, FaUpload, FaAppleAlt, FaShoppingCart } from "react-icons/fa"; // Food-themed icons
 
 const Navbar = () => {
     const pathname = usePathname();
     const router = useRouter();
     const [username, setUsername] = useState("");
-    const [isMenuOpen, setIsMenuOpen] = useState(false); // State for mobile menu
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     useEffect(() => {
         const token = Cookies.get("token");
@@ -32,7 +33,7 @@ const Navbar = () => {
     const handleLogout = () => {
         Cookies.remove("token");
         setUsername("");
-        setIsMenuOpen(false); // Close menu on logout
+        setIsMenuOpen(false);
         router.push("/");
     };
 
@@ -49,11 +50,7 @@ const Navbar = () => {
                 </div>
 
                 {/* Hamburger Menu Button (Mobile Only) */}
-                <button
-                    className="md:hidden text-white focus:outline-none"
-                    onClick={toggleMenu}
-                >
-                    {/* Hamburger Icon */}
+                <button className="md:hidden text-white focus:outline-none" onClick={toggleMenu}>
                     <svg
                         className="w-6 h-6"
                         fill="none"
@@ -72,45 +69,27 @@ const Navbar = () => {
 
                 {/* Center - Routes (Desktop) */}
                 {username ? (
-                    <div className="hidden md:flex space-x-6">
-                        <Link
-                            href="/"
-                            className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                        >
-                            Home
+                    <div className="hidden md:flex space-x-6 items-center">
+                        <Link href="/" className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`}>
+                            <FaHome className="mr-2" /> Home
                         </Link>
-                        <Link
-                            href="/recipe-generator"
-                            className={`${pathname === "/recipe-generator" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                        >
-                            Recipe Generator
+                        <Link href="/recipe-generator" className={`${pathname === "/recipe-generator" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`}>
+                            <FaUtensils className="mr-2" /> Recipe Generator
                         </Link>
-                        <Link
-                            href="/uploads"
-                            className={`${pathname === "/uploads" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                        >
-                            Upload Images
+                        <Link href="/uploads" className={`${pathname === "/uploads" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`}>
+                            <FaUpload className="mr-2" /> Upload Images
                         </Link>
-                        <Link
-                            href="/nutrition"
-                            className={`${pathname === "/nutrition" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                        >
-                            Nutrition Info
+                        <Link href="/nutrition" className={`${pathname === "/nutrition" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`}>
+                            <FaAppleAlt className="mr-2" /> Nutrition Info
                         </Link>
-                        <Link
-                            href="/shopping-list"
-                            className={`${pathname === "/shopping-list" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                        >
-                            Shopping List
+                        <Link href="/shopping-list" className={`${pathname === "/shopping-list" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`}>
+                            <FaShoppingCart className="mr-2" /> Shopping List
                         </Link>
                     </div>
                 ) : (
-                    <div className="hidden md:flex space-x-6">
-                        <Link
-                            href="/"
-                            className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                        >
-                            Home
+                    <div className="hidden md:flex space-x-6 items-center">
+                        <Link href="/" className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`}>
+                            <FaHome className="mr-2" /> Home
                         </Link>
                     </div>
                 )}
@@ -119,28 +98,17 @@ const Navbar = () => {
                 <div className="hidden md:flex space-x-4">
                     {username ? (
                         <>
-                            <span className="bg-white text-gray-900 py-1 px-3 rounded transition">
-                                {username}
-                            </span>
-                            <button
-                                onClick={handleLogout}
-                                className="bg-red-400 text-white py-1 px-3 rounded hover:bg-red-500 transition"
-                            >
+                            <span className="bg-white text-gray-900 py-1 px-3 rounded transition">{username}</span>
+                            <button onClick={handleLogout} className="bg-red-400 text-white py-1 px-3 rounded hover:bg-red-500 transition">
                                 Logout
                             </button>
                         </>
                     ) : (
                         <>
-                            <Link
-                                href="/login"
-                                className="bg-white text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition"
-                            >
+                            <Link href="/login" className="bg-white text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition">
                                 Login
                             </Link>
-                            <Link
-                                href="/register"
-                                className="bg-yellow-400 text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition"
-                            >
+                            <Link href="/register" className="bg-yellow-400 text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition">
                                 Register
                             </Link>
                         </>
@@ -152,72 +120,35 @@ const Navbar = () => {
                     <div className="absolute top-16 left-0 w-full bg-gradient-to-r from-blue-600 to-purple-600 flex flex-col items-center space-y-4 py-4 md:hidden">
                         {username ? (
                             <>
-                                <Link
-                                    href="/"
-                                    className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                                    onClick={() => setIsMenuOpen(false)}
-                                >
-                                    Home
+                                <Link href="/" className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`} onClick={() => setIsMenuOpen(false)}>
+                                    <FaHome className="mr-2" /> Home
                                 </Link>
-                                <Link
-                                    href="/recipe-generator"
-                                    className={`${pathname === "/recipe-generator" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                                    onClick={() => setIsMenuOpen(false)}
-                                >
-                                    Recipe Generator
+                                <Link href="/recipe-generator" className={`${pathname === "/recipe-generator" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`} onClick={() => setIsMenuOpen(false)}>
+                                    <FaUtensils className="mr-2" /> Recipe Generator
                                 </Link>
-                                <Link
-                                    href="/uploads"
-                                    className={`${pathname === "/uploads" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                                    onClick={() => setIsMenuOpen(false)}
-                                >
-                                    Upload Images
+                                <Link href="/uploads" className={`${pathname === "/uploads" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`} onClick={() => setIsMenuOpen(false)}>
+                                    <FaUpload className="mr-2" /> Upload Images
                                 </Link>
-                                <Link
-                                    href="/nutrition"
-                                    className={`${pathname === "/nutrition" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                                    onClick={() => setIsMenuOpen(false)}
-                                >
-                                    Nutrition Info
+                                <Link href="/nutrition" className={`${pathname === "/nutrition" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`} onClick={() => setIsMenuOpen(false)}>
+                                    <FaAppleAlt className="mr-2" /> Nutrition Info
                                 </Link>
-                                <Link
-                                    href="/shopping-list"
-                                    className={`${pathname === "/shopping-list" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                                    onClick={() => setIsMenuOpen(false)}
-                                >
-                                    Shopping List
+                                <Link href="/shopping-list" className={`${pathname === "/shopping-list" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`} onClick={() => setIsMenuOpen(false)}>
+                                    <FaShoppingCart className="mr-2" /> Shopping List
                                 </Link>
-                                <span className="bg-white text-gray-900 py-1 px-3 rounded transition">
-                                    {username}
-                                </span>
-                                <button
-                                    onClick={handleLogout}
-                                    className="bg-red-400 text-white py-1 px-3 rounded hover:bg-red-500 transition"
-                                >
+                                <span className="bg-white text-gray-900 py-1 px-3 rounded transition">{username}</span>
+                                <button onClick={handleLogout} className="bg-red-400 text-white py-1 px-3 rounded hover:bg-red-500 transition">
                                     Logout
                                 </button>
                             </>
                         ) : (
                             <>
-                                <Link
-                                    href="/"
-                                    className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition`}
-                                    onClick={() => setIsMenuOpen(false)}
-                                >
-                                    Home
+                                <Link href="/" className={`${pathname === "/" ? "text-yellow-300" : "text-white"} hover:text-yellow-300 transition flex items-center`} onClick={() => setIsMenuOpen(false)}>
+                                    <FaHome className="mr-2" /> Home
                                 </Link>
-                                <Link
-                                    href="/login"
-                                    className="bg-white text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition"
-                                    onClick={() => setIsMenuOpen(false)}
-                                >
+                                <Link href="/login" className="bg-white text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition" onClick={() => setIsMenuOpen(false)}>
                                     Login
                                 </Link>
-                                <Link
-                                    href="/register"
-                                    className="bg-yellow-400 text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition"
-                                    onClick={() => setIsMenuOpen(false)}
-                                >
+                                <Link href="/register" className="bg-yellow-400 text-gray-900 py-1 px-3 rounded hover:bg-yellow-300 transition" onClick={() => setIsMenuOpen(false)}>
                                     Register
                                 </Link>
                             </>
