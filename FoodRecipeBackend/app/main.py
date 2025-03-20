@@ -224,9 +224,41 @@ async def get_videos(query: str):
         print(f"Error fetching YouTube videos: {str(e)}")
         return {"videos": []}
 
+
+async def save_chat_message(db: AsyncSession, user_id: int, message: str):
+    chat_entry = ChatLog(user_id=user_id, message=message)
+    db.add(chat_entry)
+    await db.commit()
+    await db.refresh(chat_entry)
+
+# Helper function to save recipe searches
+async def save_recipe_search(db: AsyncSession, user_id: int, query: str):
+    search_entry = RecipeSearch(user_id=user_id, query=query)
+    db.add(search_entry)
+    await db.commit()
+    await db.refresh(search_entry)
+
+
+# Helper function to save PDF records
+async def save_pdf_record(db: AsyncSession, user_id: int, file_path: str):
+    pdf_entry = PDFRecord(user_id=user_id, file_path=file_path)
+    db.add(pdf_entry)
+    await db.commit()
+    await db.refresh(pdf_entry)
+    
+    
 @app.post("/generate-recipe/")
-async def generate_recipe(recipe_prompt: RecipePrompt, user: str = Depends(get_current_user)):
+async def generate_recipe(recipe_prompt: RecipePrompt, user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     try:
+        # Fetch user ID
+        result = await db.execute(select(User).filter(User.username == user))
+        db_user = result.scalars().first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Save recipe search
+        await save_recipe_search(db, db_user.id, recipe_prompt.prompt)
+
         messages = [
             {"role": "system", "content": "You are an AI that generates detailed recipes with ingredients, preparation steps, and cook times"},
             {"role": "user", "content": f"Generate a recipe for {recipe_prompt.prompt}"}
@@ -235,11 +267,45 @@ async def generate_recipe(recipe_prompt: RecipePrompt, user: str = Depends(get_c
             model="gpt-4", messages=messages, max_tokens=100, temperature=0.7
         )
         recipe = response.choices[0].message.content.strip()
+
+        # Save AI response to chat history
+        await save_chat_message(db, db_user.id, f"Recipe for {recipe_prompt.prompt}: {recipe}")
+
         return {"recipe": recipe}
     except openai.OpenAIError as e:
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+# @app.post("/generate-recipe/")
+# async def generate_recipe(recipe_prompt: RecipePrompt, user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+#     try:
+#         # Fetch user ID
+#         result = await db.execute(select(User).filter(User.username == user))
+#         db_user = result.scalars().first()
+#         if not db_user:
+#             raise HTTPException(status_code=404, detail="User not found")
+
+#         # Save user's prompt to chat history
+#         await save_chat_message(db, db_user.id, f"User Prompt: Generate a recipe for {recipe_prompt.prompt}")
+
+#         messages = [
+#             {"role": "system", "content": "You are an AI that generates detailed recipes with ingredients, preparation steps, and cook times"},
+#             {"role": "user", "content": f"Generate a recipe for {recipe_prompt.prompt}"}
+#         ]
+#         response = openai.chat.completions.create(
+#             model="gpt-4", messages=messages, max_tokens=100, temperature=0.7
+#         )
+#         recipe = response.choices[0].message.content.strip()
+
+#         # Save AI's response to chat history
+#         await save_chat_message(db, db_user.id, f"AI Response: {recipe}")
+
+#         return {"recipe": recipe}
+#     except openai.OpenAIError as e:
+#         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
 
 # Google Vision API setup
 GOOGLE_VISION_CREDENTIALS_PATH = os.getenv("GOOGLE_VISION_CREDENTIALS_PATH")
@@ -272,16 +338,28 @@ def get_image_embedding(image_bytes):
     with torch.no_grad():
         embedding = model.encode_image(image)
     return embedding.cpu().numpy()
+
+
+# Update /upload-image/ to save history
 @app.post("/upload-image/")
-async def upload_image(file: UploadFile = File(...), user: str = Depends(get_current_user)):
+async def upload_image(file: UploadFile = File(...), user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     import time
     from openai import AsyncOpenAI
     import aiohttp
 
-    client = AsyncOpenAI(api_key=OPENAI_API_KEY)  # Async client
+    client = AsyncOpenAI(api_key=OPENAI_API_KEY)
     try:
         print(f"Received file: {file.filename}")
         start_time = time.time()
+
+        # Fetch user ID
+        result = await db.execute(select(User).filter(User.username == user))
+        db_user = result.scalars().first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Save upload action to chat history
+        await save_chat_message(db, db_user.id, f"Uploaded image: {file.filename}")
 
         # Step 1: Read image bytes
         image_bytes = await file.read()
@@ -299,7 +377,7 @@ async def upload_image(file: UploadFile = File(...), user: str = Depends(get_cur
         print(f"Time for FAISS search: {time.time() - step_time:.2f} seconds")
         step_time = time.time()
 
-        # Step 4: Generate recipe with OpenAI (async with timeout)
+        # Step 4: Generate recipe with OpenAI
         messages = [
             {"role": "system", "content": "You are an expert chef AI that generates detailed food recipes."},
             {"role": "user", "content": f"Generate a detailed recipe for {best_match}."}
@@ -310,11 +388,14 @@ async def upload_image(file: UploadFile = File(...), user: str = Depends(get_cur
                     client.chat.completions.create(
                         model="gpt-4", messages=messages, max_tokens=150, temperature=0.7
                     ),
-                    timeout=30.0  # 30-second timeout
+                    timeout=30.0
                 )
                 generated_recipe = response.choices[0].message.content.strip()
                 print(f"Time for OpenAI recipe generation: {time.time() - step_time:.2f} seconds")
                 print(f"Generated Recipe: {generated_recipe}")
+
+                # Save AI response to chat history
+                await save_chat_message(db, db_user.id, f"Generated recipe for {best_match}: {generated_recipe}")
             except asyncio.TimeoutError:
                 print("OpenAI request timed out after 30 seconds")
                 raise HTTPException(status_code=504, detail="Recipe generation timed out. Please try again.")
@@ -327,23 +408,97 @@ async def upload_image(file: UploadFile = File(...), user: str = Depends(get_cur
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        await client.close()  # Ensure async client is closed
+        await client.close()
 
-@app.post("/generate-recipe-from-ingredients/")
-async def generate_recipe_from_ingredients(ingredients: RecipePrompt):
+
+# @app.post("/upload-image/")
+# async def upload_image(file: UploadFile = File(...), user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+#     import time
+#     from openai import AsyncOpenAI
+#     import aiohttp
+
+#     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+#     try:
+#         print(f"Received file: {file.filename}")
+#         start_time = time.time()
+
+#         # Fetch user ID
+#         result = await db.execute(select(User).filter(User.username == user))
+#         db_user = result.scalars().first()
+#         if not db_user:
+#             raise HTTPException(status_code=404, detail="User not found")
+
+#         # Save user's action to chat history
+#         await save_chat_message(db, db_user.id, f"User Action: Uploaded image {file.filename}")
+
+#         # Step 1: Read image bytes
+#         image_bytes = await file.read()
+#         print(f"Time to read file: {time.time() - start_time:.2f} seconds")
+#         step_time = time.time()
+
+#         # Step 2: Generate embedding with CLIP
+#         query_embedding = get_image_embedding(image_bytes)
+#         print(f"Time for CLIP embedding: {time.time() - step_time:.2f} seconds")
+#         step_time = time.time()
+
+#         # Step 3: FAISS search
+#         D, I = index.search(query_embedding, k=1)
+#         best_match = recipe_names[I[0][0]]
+#         print(f"Time for FAISS search: {time.time() - step_time:.2f} seconds")
+#         step_time = time.time()
+
+#         # Step 4: Generate recipe with OpenAI (async with timeout)
+#         messages = [
+#             {"role": "system", "content": "You are an expert chef AI that generates detailed food recipes."},
+#             {"role": "user", "content": f"Generate a detailed recipe for {best_match}."}
+#         ]
+#         async with aiohttp.ClientSession() as session:
+#             try:
+#                 response = await asyncio.wait_for(
+#                     client.chat.completions.create(
+#                         model="gpt-4", messages=messages, max_tokens=150, temperature=0.7
+#                     ),
+#                     timeout=30.0
+#                 )
+#                 generated_recipe = response.choices[0].message.content.strip()
+#                 print(f"Time for OpenAI recipe generation: {time.time() - step_time:.2f} seconds")
+#                 print(f"Generated Recipe: {generated_recipe}")
+
+#                 # Save AI's response to chat history
+#                 await save_chat_message(db, db_user.id, f"AI Response: Dish: {best_match}, Recipe: {generated_recipe}")
+#             except asyncio.TimeoutError:
+#                 print("OpenAI request timed out after 30 seconds")
+#                 raise HTTPException(status_code=504, detail="Recipe generation timed out. Please try again.")
+#             except Exception as api_error:
+#                 print(f"OpenAI API error: {str(api_error)}")
+#                 raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(api_error)}")
+
+#         return {"dish": best_match, "recipe": generated_recipe}
+#     except Exception as e:
+#         print(f"Error: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
+#     finally:
+#         await client.close()
+    
+@app.get("/chat-history/")
+async def get_chat_history(user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     try:
-        messages = [
-            {"role": "system", "content": "You are an AI chef that suggests recipes based on available ingredients."},
-            {"role": "user", "content": f"Suggest a recipe using these ingredients: {ingredients.prompt}"}
-        ]
-        response = openai.chat.completions.create(
-            model="gpt-4", messages=messages, max_tokens=150, temperature=0.7
-        )
-        recipe = response.choices[0].message.content.strip()
-        return {"recipe": recipe}
-    except openai.OpenAIError as e:
-        raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
+        # Fetch user ID
+        result = await db.execute(select(User).filter(User.username == user))
+        db_user = result.scalars().first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
 
+        # Fetch chat history for the user
+        result = await db.execute(select(ChatLog).filter(ChatLog.user_id == db_user.id).order_by(ChatLog.timestamp.asc()))
+        chat_history = result.scalars().all()
+
+        # Format the response
+        history = [{"message": entry.message, "timestamp": entry.timestamp} for entry in chat_history]
+        return {"chat_history": history}
+    except Exception as e:
+        print(f"Error fetching chat history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching chat history: {str(e)}")
 NUTRITIONIX_API_KEY = os.getenv("NUTRITIONIX_API_KEY")
 NUTRITIONIX_APP_ID = os.getenv("NUTRITIONIX_APP_ID")
 if not NUTRITIONIX_API_KEY or not NUTRITIONIX_APP_ID:
@@ -353,9 +508,12 @@ print(NUTRITIONIX_APP_ID)
 
 class FoodRequest(BaseModel):
     food_item: str
+class ShoppingListRequest(BaseModel):
+    recipes: List[str]
+
 
 @app.post("/generate-food-pdf/")
-async def generate_food_pdf(food_request: FoodRequest, user: str = Depends(get_current_user)):
+async def generate_food_pdf(food_request: FoodRequest, user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     try:
         food_item = food_request.food_item
         print(f"Received food item: {food_item}")
@@ -372,7 +530,7 @@ async def generate_food_pdf(food_request: FoodRequest, user: str = Depends(get_c
         foods = nutrition_data.get("foods", [])
         if not foods:
             raise HTTPException(status_code=400, detail="No food item found.")
-        food = foods[0]  # Take the first food item
+        food = foods[0]
 
         pdf = FPDF()
         pdf.add_page()
@@ -401,7 +559,7 @@ async def generate_food_pdf(food_request: FoodRequest, user: str = Depends(get_c
             pdf.cell(image_width, 10, '', border=1)
             if image_path and os.path.exists(image_path):
                 pdf.image(image_path, x, y, image_width, image_height)
-            pdf.set_x(x + image_width)  # Move back to start of row for next cells
+            pdf.set_x(x + image_width)
 
             # Category name cell
             pdf.cell(80, 10, category, border=1)
@@ -415,13 +573,87 @@ async def generate_food_pdf(food_request: FoodRequest, user: str = Depends(get_c
         pdf_file_path = f"{food_item.replace(' ', '_')}_nutrition_details.pdf"
         pdf.output(pdf_file_path)
         print(f"PDF successfully created: {pdf_file_path}")
+
+        # Fetch user ID
+        result = await db.execute(select(User).filter(User.username == user))
+        db_user = result.scalars().first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Save PDF record
+        await save_pdf_record(db, db_user.id, pdf_file_path)
+
         return FileResponse(pdf_file_path, media_type="application/pdf", filename=pdf_file_path)
     except Exception as e:
         print(f"Error: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
-class ShoppingListRequest(BaseModel):
-    recipes: List[str]
+# @app.post("/generate-food-pdf/")
+# async def generate_food_pdf(food_request: FoodRequest, user: str = Depends(get_current_user)):
+#     try:
+#         food_item = food_request.food_item
+#         print(f"Received food item: {food_item}")
+#         headers = {
+#             "x-app-id": NUTRITIONIX_APP_ID,
+#             "x-app-key": NUTRITIONIX_API_KEY,
+#         }
+#         params = {"query": food_item}
+#         nutrition_response = requests.post("https://trackapi.nutritionix.com/v2/natural/nutrients", headers=headers, json=params)
+#         if nutrition_response.status_code != 200:
+#             print(f"Nutritionix error: {nutrition_response.text}")
+#             raise HTTPException(status_code=400, detail="Error fetching nutrition data.")
+#         nutrition_data = nutrition_response.json()
+#         foods = nutrition_data.get("foods", [])
+#         if not foods:
+#             raise HTTPException(status_code=400, detail="No food item found.")
+#         food = foods[0]  # Take the first food item
+
+#         pdf = FPDF()
+#         pdf.add_page()
+#         pdf.set_font("Arial", size=12)
+
+#         # Title
+#         pdf.set_font("Arial", size=16, style="B")
+#         pdf.cell(0, 10, f"Nutrition Details for {food_item.title()}", ln=True, align="C")
+#         pdf.ln(10)
+
+#         # Food name
+#         pdf.set_font("Arial", size=12, style="B")
+#         pdf.cell(0, 10, f"Food: {food['food_name'].title()}", ln=True)
+#         pdf.set_font("Arial", size=12)
+#         pdf.ln(5)
+
+#         # Nutritional values table
+#         for category, key, unit in categories:
+#             value = food.get(key, "N/A")
+#             image_path = category_images.get(category, "")
+
+#             x = pdf.get_x()
+#             y = pdf.get_y()
+
+#             # Image cell with border
+#             pdf.cell(image_width, 10, '', border=1)
+#             if image_path and os.path.exists(image_path):
+#                 pdf.image(image_path, x, y, image_width, image_height)
+#             pdf.set_x(x + image_width)  # Move back to start of row for next cells
+
+#             # Category name cell
+#             pdf.cell(80, 10, category, border=1)
+
+#             # Value cell, right-aligned
+#             pdf.cell(50, 10, f"{value} {unit}", border=1, align="R")
+
+#             # Move to next line
+#             pdf.ln(10)
+
+#         pdf_file_path = f"{food_item.replace(' ', '_')}_nutrition_details.pdf"
+#         pdf.output(pdf_file_path)
+#         print(f"PDF successfully created: {pdf_file_path}")
+#         return FileResponse(pdf_file_path, media_type="application/pdf", filename=pdf_file_path)
+#     except Exception as e:
+#         print(f"Error: {e}")
+#         traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
 
 # Helper function to get image path
 def get_image_path(filename):
@@ -432,11 +664,164 @@ def get_image_path(filename):
 # Shopping cart image path
 shopping_cart_image = get_image_path("shopping_cart.png")
 
+# @app.post("/generate-shopping-list/")
+# async def generate_shopping_list(request: ShoppingListRequest, user: str = Depends(get_current_user)):
+#     try:
+#         selected_recipes = request.recipes
+#         recipe_ingredients = {}  # Dictionary to store ingredients by recipe
+
+#         # Fetch ingredients for each recipe
+#         for recipe in selected_recipes:
+#             messages = [
+#                 {"role": "system", "content": "You are an AI chef that provides ingredients lists for recipes."},
+#                 {"role": "user", "content": f"Provide a list of ingredients needed for {recipe}."}
+#             ]
+#             response = openai.chat.completions.create(
+#                 model="gpt-4", messages=messages, max_tokens=200, temperature=0.7
+#             )
+#             ingredients = response.choices[0].message.content.strip().split("\n")
+#             # Store ingredients for this recipe, removing empty or malformed lines
+#             recipe_ingredients[recipe] = [item.strip() for item in ingredients if item.strip()]
+
+#         pdf = FPDF()
+#         pdf.add_page()
+#         pdf.set_font("Arial", size=12)
+
+#         # Title
+#         pdf.set_font("Arial", style="B", size=16)
+#         pdf.cell(0, 10, txt="Grocery Shopping List", ln=True, align="C")
+#         pdf.ln(5)
+
+#         # Add shopping cart image below title
+#         if os.path.exists(shopping_cart_image):
+#             pdf.image(shopping_cart_image, x=95, y=20, w=10, h=10)  # Centered below title
+#         pdf.ln(15)  # Space after image
+
+#         pdf.set_font("Arial", size=12)
+
+#         # Generate sections for each recipe
+#         for recipe, ingredients in recipe_ingredients.items():
+#             # Recipe heading with border
+#             pdf.set_font("Arial", style="B", size=14)
+#             pdf.cell(0, 10, txt=f"{recipe.title()}", ln=True, border=1)
+#             pdf.set_font("Arial", size=12)
+#             pdf.ln(2)
+
+#             # Ingredients list for this recipe
+#             for ingredient in ingredients:
+#                 # Handle quantity if present (e.g., "2 potatoes" or "- 2 potatoes")
+#                 if ingredient.startswith("- "):
+#                     ingredient = ingredient[2:].strip()  # Remove "- " prefix if present
+#                 parts = ingredient.split(" ", 1)  # Split on first space
+#                 if len(parts) > 1 and parts[0].isdigit():
+#                     quantity = parts[0]
+#                     item = parts[1]
+#                     pdf.cell(0, 8, txt=f"- {item} (x{quantity})", ln=True)
+#                 else:
+#                     pdf.cell(0, 8, txt=f"- {ingredient}", ln=True)
+#             pdf.ln(5)  # Space between recipe sections
+
+#         pdf_path = "shopping_list.pdf"
+#         pdf.output(pdf_path)
+#         print(f"PDF successfully created: {pdf_path}")
+#         return FileResponse(pdf_path, media_type="application/pdf", filename="shopping_list.pdf")
+#     except Exception as e:
+#         print(f"Error: {e}")
+#         raise HTTPException(status_code=500, detail=f"Error generating shopping list: {str(e)}")
+# Update /generate-food-pdf/ to save PDF record
+@app.post("/generate-food-pdf/")
+async def generate_food_pdf(food_request: FoodRequest, user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    try:
+        food_item = food_request.food_item
+        print(f"Received food item: {food_item}")
+        headers = {
+            "x-app-id": NUTRITIONIX_APP_ID,
+            "x-app-key": NUTRITIONIX_API_KEY,
+        }
+        params = {"query": food_item}
+        nutrition_response = requests.post("https://trackapi.nutritionix.com/v2/natural/nutrients", headers=headers, json=params)
+        if nutrition_response.status_code != 200:
+            print(f"Nutritionix error: {nutrition_response.text}")
+            raise HTTPException(status_code=400, detail="Error fetching nutrition data.")
+        nutrition_data = nutrition_response.json()
+        foods = nutrition_data.get("foods", [])
+        if not foods:
+            raise HTTPException(status_code=400, detail="No food item found.")
+        food = foods[0]
+
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+
+        # Title
+        pdf.set_font("Arial", size=16, style="B")
+        pdf.cell(0, 10, f"Nutrition Details for {food_item.title()}", ln=True, align="C")
+        pdf.ln(10)
+
+        # Food name
+        pdf.set_font("Arial", size=12, style="B")
+        pdf.cell(0, 10, f"Food: {food['food_name'].title()}", ln=True)
+        pdf.set_font("Arial", size=12)
+        pdf.ln(5)
+
+        # Nutritional values table
+        for category, key, unit in categories:
+            value = food.get(key, "N/A")
+            image_path = category_images.get(category, "")
+
+            x = pdf.get_x()
+            y = pdf.get_y()
+
+            # Image cell with border
+            pdf.cell(image_width, 10, '', border=1)
+            if image_path and os.path.exists(image_path):
+                pdf.image(image_path, x, y, image_width, image_height)
+            pdf.set_x(x + image_width)
+
+            # Category name cell
+            pdf.cell(80, 10, category, border=1)
+
+            # Value cell, right-aligned
+            pdf.cell(50, 10, f"{value} {unit}", border=1, align="R")
+
+            # Move to next line
+            pdf.ln(10)
+
+        pdf_file_path = f"{food_item.replace(' ', '_')}_nutrition_details.pdf"
+        pdf.output(pdf_file_path)
+        print(f"PDF successfully created: {pdf_file_path}")
+
+        # Fetch user ID
+        result = await db.execute(select(User).filter(User.username == user))
+        db_user = result.scalars().first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Save PDF record
+        await save_pdf_record(db, db_user.id, pdf_file_path)
+
+        return FileResponse(pdf_file_path, media_type="application/pdf", filename=pdf_file_path)
+    except Exception as e:
+        print(f"Error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
+
+# Update /generate-shopping-list/ to save PDF record
 @app.post("/generate-shopping-list/")
-async def generate_shopping_list(request: ShoppingListRequest, user: str = Depends(get_current_user)):
+async def generate_shopping_list(request: ShoppingListRequest, user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     try:
         selected_recipes = request.recipes
-        recipe_ingredients = {}  # Dictionary to store ingredients by recipe
+        recipe_ingredients = {}
+
+        # Fetch user ID
+        result = await db.execute(select(User).filter(User.username == user))
+        db_user = result.scalars().first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Save recipe search for shopping list
+        for recipe in selected_recipes:
+            await save_recipe_search(db, db_user.id, f"Shopping list recipe: {recipe}")
 
         # Fetch ingredients for each recipe
         for recipe in selected_recipes:
@@ -448,7 +833,6 @@ async def generate_shopping_list(request: ShoppingListRequest, user: str = Depen
                 model="gpt-4", messages=messages, max_tokens=200, temperature=0.7
             )
             ingredients = response.choices[0].message.content.strip().split("\n")
-            # Store ingredients for this recipe, removing empty or malformed lines
             recipe_ingredients[recipe] = [item.strip() for item in ingredients if item.strip()]
 
         pdf = FPDF()
@@ -462,37 +846,132 @@ async def generate_shopping_list(request: ShoppingListRequest, user: str = Depen
 
         # Add shopping cart image below title
         if os.path.exists(shopping_cart_image):
-            pdf.image(shopping_cart_image, x=95, y=20, w=10, h=10)  # Centered below title
-        pdf.ln(15)  # Space after image
+            pdf.image(shopping_cart_image, x=95, y=20, w=10, h=10)
+        pdf.ln(15)
 
         pdf.set_font("Arial", size=12)
 
         # Generate sections for each recipe
         for recipe, ingredients in recipe_ingredients.items():
-            # Recipe heading with border
             pdf.set_font("Arial", style="B", size=14)
             pdf.cell(0, 10, txt=f"{recipe.title()}", ln=True, border=1)
             pdf.set_font("Arial", size=12)
             pdf.ln(2)
 
-            # Ingredients list for this recipe
             for ingredient in ingredients:
-                # Handle quantity if present (e.g., "2 potatoes" or "- 2 potatoes")
                 if ingredient.startswith("- "):
-                    ingredient = ingredient[2:].strip()  # Remove "- " prefix if present
-                parts = ingredient.split(" ", 1)  # Split on first space
+                    ingredient = ingredient[2:].strip()
+                parts = ingredient.split(" ", 1)
                 if len(parts) > 1 and parts[0].isdigit():
                     quantity = parts[0]
                     item = parts[1]
                     pdf.cell(0, 8, txt=f"- {item} (x{quantity})", ln=True)
                 else:
                     pdf.cell(0, 8, txt=f"- {ingredient}", ln=True)
-            pdf.ln(5)  # Space between recipe sections
+            pdf.ln(5)
 
         pdf_path = "shopping_list.pdf"
         pdf.output(pdf_path)
         print(f"PDF successfully created: {pdf_path}")
+
+        # Save PDF record
+        await save_pdf_record(db, db_user.id, pdf_path)
+
         return FileResponse(pdf_path, media_type="application/pdf", filename="shopping_list.pdf")
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating shopping list: {str(e)}")
+# New endpoints to fetch history for each route
+@app.get("/recipe-generator-history/")
+async def get_recipe_generator_history(user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db.execute(select(User).filter(User.username == user))
+        db_user = result.scalars().first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Fetch recipe searches
+        result = await db.execute(select(RecipeSearch).filter(RecipeSearch.user_id == db_user.id).order_by(RecipeSearch.timestamp.asc()))
+        searches = result.scalars().all()
+
+        # Fetch related chat logs
+        result = await db.execute(select(ChatLog).filter(ChatLog.user_id == db_user.id).order_by(ChatLog.timestamp.asc()))
+        chats = result.scalars().all()
+
+        history = [
+            {"type": "search", "query": entry.query, "timestamp": entry.timestamp} for entry in searches
+        ] + [
+            {"type": "chat", "message": entry.message, "timestamp": entry.timestamp} for entry in chats if "Recipe for" in entry.message
+        ]
+        history.sort(key=lambda x: x["timestamp"])  # Sort by timestamp
+        return {"history": history}
+    except Exception as e:
+        print(f"Error fetching recipe generator history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching history: {str(e)}")
+
+@app.get("/uploads-history/")
+async def get_uploads_history(user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db.execute(select(User).filter(User.username == user))
+        db_user = result.scalars().first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        result = await db.execute(select(ChatLog).filter(ChatLog.user_id == db_user.id).order_by(ChatLog.timestamp.asc()))
+        chats = result.scalars().all()
+
+        history = [
+            {"type": "chat", "message": entry.message, "timestamp": entry.timestamp} for entry in chats if "Uploaded image" in entry.message or "Generated recipe" in entry.message
+        ]
+        history.sort(key=lambda x: x["timestamp"])
+        return {"history": history}
+    except Exception as e:
+        print(f"Error fetching uploads history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching history: {str(e)}")
+
+@app.get("/nutrition-history/")
+async def get_nutrition_history(user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db.execute(select(User).filter(User.username == user))
+        db_user = result.scalars().first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        result = await db.execute(select(PDFRecord).filter(PDFRecord.user_id == db_user.id).order_by(PDFRecord.created_at.asc()))
+        pdfs = result.scalars().all()
+
+        history = [
+            {"type": "pdf", "file_path": entry.file_path, "created_at": entry.created_at} for entry in pdfs if "nutrition_details" in entry.file_path
+        ]
+        history.sort(key=lambda x: x["created_at"])
+        return {"history": history}
+    except Exception as e:
+        print(f"Error fetching nutrition history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching history: {str(e)}")
+
+@app.get("/shopping-list-history/")
+async def get_shopping_list_history(user: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db.execute(select(User).filter(User.username == user))
+        db_user = result.scalars().first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Fetch recipe searches related to shopping list
+        result = await db.execute(select(RecipeSearch).filter(RecipeSearch.user_id == db_user.id).order_by(RecipeSearch.timestamp.asc()))
+        searches = result.scalars().all()
+
+        # Fetch PDF records for shopping lists
+        result = await db.execute(select(PDFRecord).filter(PDFRecord.user_id == db_user.id).order_by(PDFRecord.created_at.asc()))
+        pdfs = result.scalars().all()
+
+        history = [
+            {"type": "search", "query": entry.query, "timestamp": entry.timestamp} for entry in searches if "Shopping list recipe" in entry.query
+        ] + [
+            {"type": "pdf", "file_path": entry.file_path, "created_at": entry.created_at} for entry in pdfs if "shopping_list" in entry.file_path
+        ]
+        history.sort(key=lambda x: x["timestamp"] if "timestamp" in x else x["created_at"])
+        return {"history": history}
+    except Exception as e:
+        print(f"Error fetching shopping list history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching history: {str(e)}")

@@ -12,8 +12,8 @@ import { FaUserPlus, FaUpload, FaUtensils, FaAppleAlt, FaShoppingCart } from "re
 
 const HomePage = () => {
     const dishes = [
-        { src: "/Images/pizza.jpeg", alt: "Pizza" },
-        { src: "/images/tikka.jpeg", alt: "Chicken Tikka" },
+        { src: "/Images/1ff7362d-341d-4a3c-83d5-dc1a9a67dd2b-removebg-preview.png", alt: "Pizza" },
+        { src: "/images/tikka-removebg-preview.png", alt: "Chicken Tikka" },
         { src: "/images/rice.jpeg", alt: "Fries" },
     ];
 
@@ -66,7 +66,7 @@ const HomePage = () => {
                                     alt={dish.alt}
                                     width={256}
                                     height={256}
-                                    className="object-contain rounded-full shadow-lg"
+                                    className="object-contain rounded-full "
                                 />
                             </motion.div>
                         </SwiperSlide>
