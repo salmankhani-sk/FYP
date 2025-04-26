@@ -1,23 +1,84 @@
+// This directive tells Next.js to render this component on the client side.
+// It's important because it enables client-side features like React hooks and interactivity, which are essential for dynamic UI elements like animations and sliders.
+// Use case: Ensures the homepage can include features that require client-side execution, such as carousel autoplay or hover effects.
 "use client";
 
+// Import the Link component from Next.js for client-side navigation.
+// It's important for providing a smooth, fast navigation experience without full page reloads.
+// Use case: Links the "Get Started" button to the registration page, enhancing user flow.
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Swiper, SwiperSlide } from "swiper/react";
-import { Navigation, Pagination, Autoplay } from "swiper/modules";
-import "swiper/css";
-import "swiper/css/navigation";
-import "swiper/css/pagination";
-import Image from "next/image";
-import { FaUserPlus, FaUpload, FaUtensils, FaAppleAlt, FaShoppingCart } from "react-icons/fa";
 
-const HomePage = () => {
-    const dishes = [
+// Import motion from Framer Motion, a library for animations.
+// It's important for creating engaging, smooth transitions and effects that improve the visual appeal.
+// Use case: Animates the title and images to draw user attention and make the UI interactive.
+import { motion } from "framer-motion";
+
+// Import Swiper and SwiperSlide from swiper/react to create a carousel.
+// It's important for displaying multiple items (like dish images) in a compact, touch-friendly format.
+// Use case: Showcases a rotating gallery of dish images in the hero section.
+import { Swiper, SwiperSlide } from "swiper/react";
+
+// Import Swiper modules to add navigation arrows, pagination dots, and autoplay functionality.
+// It's important for enhancing the carousel's usability and automation.
+// Use case: Allows users to navigate slides manually or let them rotate automatically for a hands-free experience.
+import { Navigation, Pagination, Autoplay } from "swiper/modules";
+
+// Import the base Swiper CSS for default styling of the carousel.
+// It's important to ensure the carousel looks polished and functions correctly out of the box.
+// Use case: Provides the foundational styles for the dish image slider.
+import "swiper/css";
+
+// Import Swiper navigation CSS to style the navigation arrows.
+// It's important for visually indicating how users can move between slides.
+// Use case: Adds clickable arrows to the carousel for manual navigation.
+import "swiper/css/navigation";
+
+// Import Swiper pagination CSS to style the pagination dots.
+// It's important for showing the number of slides and the current slide position.
+// Use case: Displays clickable dots below the carousel to jump between dish images.
+import "swiper/css/pagination";
+
+// Import the Image component from Next.js for optimized image handling.
+// It's important for improving performance with automatic optimization, lazy loading, and responsive sizing.
+// Use case: Loads dish and project images efficiently, reducing page load time.
+import Image from "next/image";
+
+// Import specific icons from react-icons (Font Awesome) for visual representation.
+// It's important for adding intuitive, recognizable symbols to the "How It Works" section.
+// Use case: Enhances user understanding by pairing text with icons like a user for registration or a cart for shopping.
+import { FaUserPlus, FaUpload, FaUtensils, FaAppleAlt, FaShoppingCart } from "react-icons/fa";
+import { JSX } from "react";
+
+// Define interfaces for TypeScript type safety
+// Interface for dish objects in the carousel
+interface Dish {
+  src: string;
+  alt: string;
+}
+
+// Interface for step objects in the "How It Works" section
+interface Step {
+  icon: JSX.Element;
+  text: string;
+}
+
+// Define the HomePage functional component as the default export for Next.js App Router.
+// It's important because it serves as the main page component for the root route (/).
+// Use case: Renders the homepage content when users visit the root URL.
+export default function HomePage() {
+    // Define an array of dish objects, each with an image source (src) and alt text (alt).
+    // It's important for storing data used in the carousel to showcase recipe examples.
+    // Use case: Populates the Swiper carousel with images of dishes like Pizza and Chicken Tikka.
+    const dishes: Dish[] = [
         { src: "/Images/1ff7362d-341d-4a3c-83d5-dc1a9a67dd2b-removebg-preview.png", alt: "Pizza" },
         { src: "/images/tikka-removebg-preview.png", alt: "Chicken Tikka" },
         { src: "/images/rice.jpeg", alt: "Fries" },
     ];
 
-    const steps = [
+    // Define an array of step objects, each with an icon and descriptive text.
+    // It's important for guiding users through the app’s functionality in the "How It Works" section.
+    // Use case: Explains steps like registering or uploading ingredients with visual cues.
+    const steps: Step[] = [
         { icon: <FaUserPlus />, text: "Register or login to your account to access all features." },
         { icon: <FaUpload />, text: "Upload an image of ingredients or enter a list of items." },
         { icon: <FaUtensils />, text: "Get a detailed recipe generated by AI." },
@@ -25,10 +86,18 @@ const HomePage = () => {
         { icon: <FaShoppingCart />, text: "Create a shopping list for your selected recipes." },
     ];
 
+    // Return the JSX structure that defines the homepage layout and content.
+    // It's important as it renders all the visual elements users will interact with.
+    // Use case: Combines all sections (Hero, About, etc.) into a cohesive page.
     return (
         <main className="bg-gray-50 min-h-screen">
-            {/* Hero Section */}
+            {/* Hero Section: A visually striking section at the top to engage users immediately.
+               It's important for making a strong first impression and introducing the app.
+               Use case: Highlights the app’s purpose and showcases dish images to attract users. */}
             <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white py-16 px-4 text-center">
+                {/* Animated h1 heading using motion for the main title.
+                   It's important for drawing attention with a dynamic entrance effect.
+                   Use case: Welcomes users with an eye-catching animation that emphasizes the app’s name. */}
                 <motion.h1
                     className="text-4xl md:text-6xl font-bold mb-4"
                     initial={{ opacity: 0, y: -50 }}
@@ -37,6 +106,9 @@ const HomePage = () => {
                 >
                     Welcome to Food Recipe AI
                 </motion.h1>
+                {/* Animated paragraph using motion to describe the app.
+                   It's important for providing a brief overview with a subtle animation.
+                   Use case: Informs users about the app’s features in an engaging way. */}
                 <motion.p
                     className="text-lg md:text-xl mb-8"
                     initial={{ opacity: 0 }}
@@ -45,6 +117,9 @@ const HomePage = () => {
                 >
                     Your personal assistant for generating food recipes, analyzing nutrition, and creating shopping lists!
                 </motion.p>
+                {/* Swiper component to create a carousel for dish images.
+                   It's important for showcasing multiple images in a limited space.
+                   Use case: Displays a rotating gallery of dishes to entice users. */}
                 <Swiper
                     modules={[Navigation, Pagination, Autoplay]}
                     spaceBetween={20}
@@ -72,6 +147,9 @@ const HomePage = () => {
                         </SwiperSlide>
                     ))}
                 </Swiper>
+                {/* Link component styled as a button to navigate to the registration page.
+                   It's important for providing a clear call-to-action (CTA).
+                   Use case: Encourages users to sign up and start using the app. */}
                 <Link
                     href="/register"
                     className="mt-8 inline-block bg-yellow-400 text-gray-900 px-6 py-3 rounded-md text-lg font-semibold hover:bg-yellow-300 transition"
@@ -80,7 +158,9 @@ const HomePage = () => {
                 </Link>
             </div>
 
-            {/* About Section */}
+            {/* About Section: Provides details about the project’s purpose and features.
+               It's important for informing users about what the app offers.
+               Use case: Builds trust and interest by explaining the app’s value. */}
             <div className="max-w-6xl mx-auto py-12 px-4 flex flex-col md:flex-row items-center">
                 <div className="md:w-1/2">
                     <h2 className="text-2xl font-bold text-gray-800 mb-4">About the Project</h2>
@@ -103,7 +183,9 @@ const HomePage = () => {
                 </motion.div>
             </div>
 
-            {/* How It Works Section */}
+            {/* How It Works Section: Explains the app’s usage steps.
+               It's important for guiding new users through the process.
+               Use case: Reduces learning curve by showing how to use the app. */}
             <div className="bg-white py-12 px-4">
                 <div className="max-w-6xl mx-auto">
                     <h2 className="text-2xl font-bold text-gray-800 mb-8 text-center">How It Works</h2>
@@ -124,7 +206,9 @@ const HomePage = () => {
                 </div>
             </div>
 
-            {/* Call to Action */}
+            {/* Call to Action Section: Encourages users to start using the app.
+               It's important for driving user engagement at the page’s end.
+               Use case: Prompts users to register with a strong visual CTA. */}
             <div
                 className="bg-cover bg-center py-12 text-center"
                 style={{ backgroundImage: "url('/images/ai-generated-8483628.jpg')" }}
@@ -143,6 +227,4 @@ const HomePage = () => {
             </div>
         </main>
     );
-};
-
-export default HomePage;
+}
